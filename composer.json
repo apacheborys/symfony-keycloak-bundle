@@ -1,0 +1,30 @@
+{
+    "name": "apacheborys/symfony-keycloak-bundle",
+    "description": "Symfony bundle that bridges Keycloak PHP client into Symfony applications.",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "require": {
+        "php": "^8.4",
+        "apacheborys/keycloak-php-client": "dev-main",
+        "symfony/config": "^7.4",
+        "symfony/dependency-injection": "^7.4",
+        "symfony/framework-bundle": "^7.4",
+        "symfony/http-kernel": "^7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Apacheborys\\SymfonyKeycloakBridgeBundle\\": "src/"
+        }
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../keycloak-php-client",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
