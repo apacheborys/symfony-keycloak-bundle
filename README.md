@@ -27,10 +27,10 @@ keycloak_bridge:
   base_url: '%env(KEYCLOAK_BASE_URL)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
-  username: '%env(KEYCLOAK_USERNAME)%'
-  password: '%env(KEYCLOAK_PASSWORD)%'
-  http_client_service: 'http_client' # optional service id
+  http_client_service: 'http_client' # optional PSR-18 client service id
 ```
+
+If `http_client_service` is omitted, the underlying client will be discovered via `php-http/discovery`. Make sure a PSR-18 client is installed in your app.
 
 ## Services
 
