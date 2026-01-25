@@ -25,12 +25,21 @@ return [
 # config/packages/keycloak_bridge.yaml
 keycloak_bridge:
   base_url: '%env(KEYCLOAK_BASE_URL)%'
+  client_realm: '%env(KEYCLOAK_CLIENT_REALM)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
   http_client_service: 'http_client' # optional PSR-18 client service id
+  request_factory_service: 'psr17.request_factory' # optional PSR-17 request factory id
+  stream_factory_service: 'psr17.stream_factory' # optional PSR-17 stream factory id
+  cache_pool: 'cache.app' # optional PSR-6 cache pool id
+  realm_list_ttl: 3600
+  user_entities:
+    App\Entity\User:
+      realm: '%env(KEYCLOAK_USERS_REALM)%'
 ```
 
-If `http_client_service` is omitted, the underlying client will be discovered via `php-http/discovery`. Make sure a PSR-18 client is installed in your app.
+If you omit any of the service IDs, the bundle will rely on container aliases for the corresponding PSR interfaces.
+Make sure your app provides PSR-18 + PSR-17 implementations (and PSR-6 cache if you enable caching).
 
 ## Services
 
@@ -38,3 +47,7 @@ You can autowire these interfaces:
 
 - `Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface`
+
+User mappers must implement `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface`
+and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` is wired when
+`user_entities` is configured.
