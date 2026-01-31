@@ -13,6 +13,7 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
@@ -26,6 +27,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_it
 
 final class KeycloakBridgeBundle extends AbstractBundle
 {
+    #[Override]
     public function configure(DefinitionConfigurator $definition): void
     {
         $definition
@@ -53,6 +55,21 @@ final class KeycloakBridgeBundle extends AbstractBundle
         ;
     }
 
+    /**
+     * @param array{
+     *  base_url: string,
+     *  client_realm: string,
+     *  client_id: string,
+     *  client_secret: string,
+     *  http_client_service: string|null,
+     *  request_factory_service: string|null,
+     *  stream_factory_service: string|null,
+     *  cache_pool: string|null,
+     *  realm_list_ttl: int,
+     *  user_entities: array<string, string[]>
+     * } $config
+     */
+    #[Override]
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $builder
@@ -60,16 +77,16 @@ final class KeycloakBridgeBundle extends AbstractBundle
             ->addTag(name: 'keycloak.local_user_mapper');
 
         $services = $container->services();
-        $httpClientRef = $config['http_client_service'] !== null
+        $httpClientRef = is_string($config['http_client_service'])
             ? service(serviceId: $config['http_client_service'])
             : service(serviceId: ClientInterface::class);
-        $requestFactoryRef = $config['request_factory_service'] !== null
+        $requestFactoryRef = is_string($config['request_factory_service'])
             ? service(serviceId: $config['request_factory_service'])
             : service(serviceId: RequestFactoryInterface::class);
-        $streamFactoryRef = $config['stream_factory_service'] !== null
+        $streamFactoryRef = is_string($config['stream_factory_service'])
             ? service(serviceId: $config['stream_factory_service'])
             : service(serviceId: StreamFactoryInterface::class);
-        $cacheRef = $config['cache_pool'] !== null
+        $cacheRef = is_string($config['cache_pool'])
             ? service(serviceId: $config['cache_pool'])
             : null;
 
@@ -119,7 +136,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
 
         foreach ($config['user_entities'] as $className => $userEntityConfig) {
             $services
-                ->set(id: 'keycloak_bridge.user_entity_config.' . str_replace('\\', '_', $className), class: UserEntityConfig::class)
+                ->set(
+                    id: 'keycloak_bridge.user_entity_config.' . str_replace('\\', '_', $className),
+                    class: UserEntityConfig::class
+                )
                 ->args(
                     arguments: [
                         $userEntityConfig['realm'],

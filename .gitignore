@@ -1,2 +1,6 @@
 /vendor/
 composer.lock
+/.phpstan.cache/
+/.phpunit.cache/
+/.rector/
+/var/

@@ -51,3 +51,16 @@ You can autowire these interfaces:
 User mappers must implement `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface`
 and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` is wired when
 `user_entities` is configured.
+
+## Development
+
+```bash
+composer install
+composer check
+```
+
+To enable git hooks:
+
+```bash
+git config core.hooksPath .githooks
+```

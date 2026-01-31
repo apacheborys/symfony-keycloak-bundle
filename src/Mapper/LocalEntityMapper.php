@@ -10,6 +10,7 @@ use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\KeycloakPhpClient\Model\KeycloakCredential;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use LogicException;
+use Override;
 
 final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperInterface
 {
@@ -30,9 +31,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         $this->userEntityConfigs = $configs;
     }
 
-    /**
-     * @param list<KeycloakCredential> $credentials
-     */
+    #[Override]
     public function prepareLocalUserForKeycloakUserCreation(KeycloakUserInterface $localUser): CreateUserProfileDto
     {
         $userConfig = $this->userEntityConfigs[$localUser::class] ?? null;
@@ -53,6 +52,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         return $dto;
     }
 
+    #[Override]
     public function support(KeycloakUserInterface $localUser): bool
     {
         return isset($this->userEntityConfigs[$localUser::class]);
