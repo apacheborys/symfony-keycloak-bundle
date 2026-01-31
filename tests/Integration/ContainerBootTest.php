@@ -8,6 +8,7 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
+use Override;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Throwable;
 
@@ -18,6 +19,7 @@ final class ContainerBootTest extends KernelTestCase
      */
     private mixed $previousExceptionHandler = null;
 
+    #[Override]
     protected function setUp(): void
     {
         $this->previousExceptionHandler = set_exception_handler(
@@ -30,6 +32,7 @@ final class ContainerBootTest extends KernelTestCase
         parent::setUp();
     }
 
+    #[Override]
     protected function tearDown(): void
     {
         if ($this->previousExceptionHandler !== null) {
@@ -44,6 +47,7 @@ final class ContainerBootTest extends KernelTestCase
     /**
      * @param array<mixed> $options
      */
+    #[Override]
     protected static function createKernel(array $options = []): TestKernel
     {
         return new TestKernel('test', true);

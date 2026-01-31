@@ -9,6 +9,7 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
+use Override;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -21,6 +22,7 @@ final class TestKernel extends Kernel
 {
     use MicroKernelTrait;
 
+    #[Override]
     public function registerBundles(): iterable
     {
         return [
@@ -29,6 +31,7 @@ final class TestKernel extends Kernel
         ];
     }
 
+    #[Override]
     protected function build(ContainerBuilder $container): void
     {
         parent::build($container);
