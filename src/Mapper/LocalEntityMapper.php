@@ -7,7 +7,6 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Mapper;
 use Apacheborys\KeycloakPhpClient\DTO\Request\CreateUserProfileDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
-use Apacheborys\KeycloakPhpClient\Model\KeycloakCredential;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use LogicException;
 use Override;

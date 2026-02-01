@@ -7,6 +7,8 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
 use Override;
@@ -42,6 +44,7 @@ final class TestKernel extends Kernel
                 {
                     $serviceId = KeycloakService::class;
                     $aliasId = KeycloakServiceInterface::class;
+                    $mapperId = LocalEntityMapper::class;
 
                     if ($container->hasDefinition($serviceId)) {
                         $container->getDefinition($serviceId)->setPublic(true);
@@ -49,6 +52,10 @@ final class TestKernel extends Kernel
 
                     if ($container->hasAlias($aliasId)) {
                         $container->getAlias($aliasId)->setPublic(true);
+                    }
+
+                    if ($container->hasDefinition($mapperId)) {
+                        $container->getDefinition($mapperId)->setPublic(true);
                     }
                 }
             }
@@ -84,6 +91,11 @@ final class TestKernel extends Kernel
                 'request_factory_service' => 'psr17.factory',
                 'stream_factory_service' => 'psr17.factory',
                 'realm_list_ttl' => 30,
+                'user_entities' => [
+                    LocalUser::class => [
+                        'realm' => 'users-realm',
+                    ],
+                ],
             ]
         );
     }
