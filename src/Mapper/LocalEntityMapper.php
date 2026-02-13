@@ -24,7 +24,9 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         $configs = [];
 
         foreach ($userEntityConfigs as $config) {
-            $configs[$config->getClassName()] = $config;
+            $className = str_replace('\\\\', '\\', $config->getClassName());
+
+            $configs[$className] = $config;
         }
 
         $this->userEntityConfigs = $configs;
