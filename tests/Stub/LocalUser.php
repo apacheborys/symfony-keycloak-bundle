@@ -12,7 +12,7 @@ use Override;
 final readonly class LocalUser implements KeycloakUserInterface
 {
     public function __construct(
-        private string $id = 'local-user-id',
+        private string $id = '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
         private string $username = 'local-username',
         private string $email = 'local@example.test',
         private bool $emailVerified = true,
