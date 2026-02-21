@@ -8,8 +8,6 @@ This bundle wires `apacheborys/keycloak-php-client` into Symfony and exposes its
 composer require apacheborys/symfony-keycloak-bundle
 ```
 
-Composer is configured to use the local path repository `../keycloak-php-client`. Replace that with a VCS repository when you publish.
-
 ## Enable the bundle
 
 ```php
@@ -51,6 +49,19 @@ You can autowire these interfaces:
 User mappers must implement `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface`
 and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` is wired when
 `user_entities` is configured.
+
+`LocalEntityMapper` supports:
+- `prepareLocalUserForKeycloakUserCreation`
+- `prepareLocalUserForKeycloakLoginUser`
+- `prepareLocalUserForKeycloakUserDeletion`
+
+`prepareLocalUserForKeycloakLoginUser` builds `OidcTokenRequestDto` using:
+- entity realm from `user_entities`
+- `client_id` and `client_secret` from bundle config
+- local user username + provided plain password
+
+If your login flow needs custom fields/scope/grant behavior, register your own mapper
+implementation and tag it as `keycloak.local_user_mapper`.
 
 ## Development
 

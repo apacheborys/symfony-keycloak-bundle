@@ -66,7 +66,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  stream_factory_service: string|null,
      *  cache_pool: string|null,
      *  realm_list_ttl: int,
-     *  user_entities: array<string, string[]>
+     *  user_entities: array<string, array{realm: string}>
      * } $config
      */
     #[Override]
@@ -151,7 +151,13 @@ final class KeycloakBridgeBundle extends AbstractBundle
 
         $services
             ->set(id: LocalEntityMapper::class)
-            ->args(arguments: [tagged_iterator(tag: 'keycloak.user_entity_config')])
+            ->args(
+                arguments: [
+                    tagged_iterator(tag: 'keycloak.user_entity_config'),
+                    $config['client_id'],
+                    $config['client_secret'],
+                ]
+            )
             ->tag(name: 'keycloak.local_user_mapper');
     }
 }

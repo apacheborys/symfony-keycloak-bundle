@@ -84,4 +84,42 @@ final class ContainerBootTest extends KernelTestCase
         $dto = $mapper->prepareLocalUserForKeycloakUserCreation($user);
         self::assertSame('users-realm', $dto->getRealm());
     }
+
+    public function testUserEntityDeletionMapping(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $mapper
+         */
+        $mapper = $container->get(LocalEntityMapper::class);
+
+        $user = new LocalUser();
+        $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
+
+        self::assertSame('users-realm', $dto->getRealm());
+        self::assertSame($user->getId(), $dto->getUserId());
+    }
+
+    public function testUserEntityLoginMapping(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $mapper
+         */
+        $mapper = $container->get(LocalEntityMapper::class);
+        $user = new LocalUser();
+
+        $dto = $mapper->prepareLocalUserForKeycloakLoginUser($user, 'secret-password');
+        $formParams = $dto->toFormParams();
+
+        self::assertSame('password', $formParams['grant_type']);
+        self::assertSame('bridge-client', $formParams['client_id']);
+        self::assertSame('bridge-secret', $formParams['client_secret']);
+        self::assertSame($user->getUsername(), $formParams['username']);
+        self::assertSame('secret-password', $formParams['password']);
+    }
 }
