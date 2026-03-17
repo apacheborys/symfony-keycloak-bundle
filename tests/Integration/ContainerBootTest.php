@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Integration;
 
+use Apacheborys\KeycloakPhpClient\DTO\RoleDto;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Override;
+use Ramsey\Uuid\Uuid;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Throwable;
 
@@ -66,6 +70,9 @@ final class ContainerBootTest extends KernelTestCase
 
         self::assertTrue($container->has(KeycloakServiceInterface::class));
         self::assertTrue($container->has(KeycloakHttpClientInterface::class));
+        self::assertTrue($container->has(KeycloakJwtVerificationServiceInterface::class));
+        self::assertTrue($container->has(KeycloakJwtAuthenticator::class));
+        self::assertInstanceOf(KeycloakJwtAuthenticator::class, $container->get(KeycloakJwtAuthenticator::class));
     }
 
     public function testUserEntityRealmMapping(): void
@@ -78,11 +85,26 @@ final class ContainerBootTest extends KernelTestCase
          */
         $mapper = $container->get(LocalEntityMapper::class);
 
-        $user = new LocalUser();
+        $user = new LocalUser(roles: ['ROLE_USER', 'ROLE_ADMIN']);
         self::assertTrue($mapper->support($user));
 
-        $dto = $mapper->prepareLocalUserForKeycloakUserCreation($user);
+        $dto = $mapper->prepareLocalUserForKeycloakUserCreation(
+            $user,
+            [
+                new RoleDto(
+                    name: 'payment.ROLE_USER.svc',
+                    id: Uuid::fromString('a7d9fd61-1f20-4d69-9f8f-af72784b9a02')
+                ),
+                new RoleDto(
+                    name: 'payment.ROLE_ADMIN.svc',
+                    id: Uuid::fromString('7ae8eba6-f101-45a5-9f9e-a77032410cc5')
+                ),
+            ]
+        );
         self::assertSame('users-realm', $dto->getRealm());
+        self::assertCount(2, $dto->getRoles());
+        self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
+        self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
     }
 
     public function testUserEntityDeletionMapping(): void
@@ -99,7 +121,7 @@ final class ContainerBootTest extends KernelTestCase
         $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
 
         self::assertSame('users-realm', $dto->getRealm());
-        self::assertSame($user->getId(), $dto->getUserId());
+        self::assertSame($user->getId(), $dto->getUserId()->toString());
     }
 
     public function testUserEntityLoginMapping(): void
@@ -121,5 +143,50 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('bridge-secret', $formParams['client_secret']);
         self::assertSame($user->getUsername(), $formParams['username']);
         self::assertSame('secret-password', $formParams['password']);
+    }
+
+    public function testUserEntityUpdateDiffMapping(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $mapper
+         */
+        $mapper = $container->get(LocalEntityMapper::class);
+
+        $oldUser = new LocalUser(
+            email: 'before@example.test',
+            firstName: 'Before',
+            roles: ['ROLE_USER'],
+        );
+        $newUser = new LocalUser(
+            email: 'after@example.test',
+            firstName: 'After',
+            roles: ['ROLE_USER', 'ROLE_ADMIN'],
+        );
+
+        $dto = $mapper->prepareLocalUserDiffForKeycloakUserUpdate(
+            oldUserVersion: $oldUser,
+            newUserVersion: $newUser,
+            availableRoles: [
+                new RoleDto(
+                    name: 'payment.ROLE_USER.svc',
+                    id: Uuid::fromString('ebec7392-12ea-4d6a-b55a-6d17644f17c2')
+                ),
+                new RoleDto(
+                    name: 'payment.ROLE_ADMIN.svc',
+                    id: Uuid::fromString('2af3f4de-0251-4be3-9f33-ce4f3ce69a01')
+                ),
+            ],
+        );
+
+        self::assertSame('users-realm', $dto->getRealm());
+        self::assertSame($newUser->getId(), $dto->getUserId()->toString());
+        self::assertSame('after@example.test', $dto->getProfile()->getEmail());
+        self::assertNotNull($dto->getProfile()->getRoles());
+        self::assertCount(2, $dto->getProfile()->getRoles());
+        self::assertSame('payment.ROLE_USER.svc', $dto->getProfile()->getRoles()[0]->getName());
+        self::assertSame('payment.ROLE_ADMIN.svc', $dto->getProfile()->getRoles()[1]->getName());
     }
 }

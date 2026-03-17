@@ -19,6 +19,8 @@ final readonly class LocalUser implements KeycloakUserInterface
         private string $firstName = 'Local',
         private string $lastName = 'User',
         private bool $enabled = true,
+        /** @var string[] */
+        private array $roles = [],
     ) {
     }
 
@@ -61,7 +63,7 @@ final readonly class LocalUser implements KeycloakUserInterface
     #[Override]
     public function getRoles(): array
     {
-        return [];
+        return $this->roles;
     }
 
     #[Override]

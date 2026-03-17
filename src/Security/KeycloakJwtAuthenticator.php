@@ -1,0 +1,265 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Apacheborys\SymfonyKeycloakBridgeBundle\Security;
+
+use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
+use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
+use Override;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Exception\AuthenticationException;
+use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
+use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
+use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
+use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+
+final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
+{
+    private const string REQUEST_ATTRIBUTE_RAW_JWT = '_keycloak_bridge.jwt.raw';
+    private const string REQUEST_ATTRIBUTE_PARSED_JWT = '_keycloak_bridge.jwt.parsed';
+
+    public function __construct(
+        private readonly KeycloakJwtVerificationServiceInterface $jwtVerificationService,
+        private readonly KeycloakClientConfig $keycloakClientConfig,
+    ) {
+    }
+
+    #[Override]
+    public function supports(Request $request): ?bool
+    {
+        $rawJwt = $this->extractBearerToken(request: $request);
+        if ($rawJwt === null) {
+            return false;
+        }
+
+        try {
+            $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
+            return false;
+        }
+
+        $request->attributes->set(self::REQUEST_ATTRIBUTE_RAW_JWT, $rawJwt);
+        $request->attributes->set(self::REQUEST_ATTRIBUTE_PARSED_JWT, $jwt);
+
+        return true;
+    }
+
+    #[Override]
+    public function authenticate(Request $request): Passport
+    {
+        $rawJwt = $request->attributes->get(self::REQUEST_ATTRIBUTE_RAW_JWT);
+        if (!is_string($rawJwt) || $rawJwt === '') {
+            $rawJwt = $this->extractBearerToken(request: $request);
+        }
+
+        if (!is_string($rawJwt) || $rawJwt === '') {
+            throw new CustomUserMessageAuthenticationException(message: 'JWT bearer token was not provided.');
+        }
+
+        $jwt = $request->attributes->get(self::REQUEST_ATTRIBUTE_PARSED_JWT);
+        if (!$jwt instanceof JsonWebToken) {
+            try {
+                $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
+            } catch (\Throwable) {
+                throw new CustomUserMessageAuthenticationException(message: 'Malformed JWT token.');
+            }
+        }
+
+        if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
+            throw new CustomUserMessageAuthenticationException(message: 'JWT issuer is not supported.');
+        }
+
+        if (!$this->jwtVerificationService->verifyJwt(jwt: $rawJwt)) {
+            throw new CustomUserMessageAuthenticationException(message: 'JWT signature validation failed.');
+        }
+
+        /** @var non-empty-string $userIdentifier */
+        $userIdentifier = $this->resolveUserIdentifier(jwt: $jwt);
+        $roles = $this->extractRoles(jwt: $jwt);
+
+        return new SelfValidatingPassport(
+            new UserBadge(
+                userIdentifier: $userIdentifier,
+                userLoader: static fn (string $_): KeycloakJwtUser => new KeycloakJwtUser(
+                    userIdentifier: $userIdentifier,
+                    roles: $roles,
+                    rawToken: $rawJwt,
+                ),
+            ),
+        );
+    }
+
+    #[Override]
+    public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
+    {
+        return null;
+    }
+
+    #[Override]
+    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+    {
+        return new JsonResponse(
+            data: [
+                'message' => 'Authentication failed.',
+                'reason' => $exception->getMessageKey(),
+            ],
+            status: Response::HTTP_UNAUTHORIZED,
+        );
+    }
+
+    #[Override]
+    public function start(Request $request, ?AuthenticationException $authException = null): Response
+    {
+        return new JsonResponse(
+            data: [
+                'message' => 'Authentication required.',
+            ],
+            status: Response::HTTP_UNAUTHORIZED,
+        );
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function resolveUserIdentifier(JsonWebToken $jwt): string
+    {
+        $preferredUsername = trim($jwt->getPayload()->getPreferredUsername());
+        if ($preferredUsername !== '') {
+            return $preferredUsername;
+        }
+
+        return $jwt->getPayload()->getSub()->toString();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function extractRoles(JsonWebToken $jwt): array
+    {
+        $rawRoles = $jwt->getPayload()->getRealmAccess()['roles'];
+
+        foreach ($jwt->getPayload()->getResourceAccess() as $resourceAccess) {
+            foreach ($resourceAccess['roles'] as $resourceRole) {
+                if (!is_string($resourceRole)) {
+                    continue;
+                }
+
+                $rawRoles[] = $resourceRole;
+            }
+        }
+
+        $roles = [];
+        foreach ($rawRoles as $rawRole) {
+            if (!is_string($rawRole)) {
+                continue;
+            }
+
+            $normalizedRole = trim($rawRole);
+            if ($normalizedRole === '') {
+                continue;
+            }
+
+            $roles[$normalizedRole] = true;
+        }
+
+        if ($roles === []) {
+            $roles['ROLE_USER'] = true;
+        }
+
+        return array_keys($roles);
+    }
+
+    private function isIssuerSupported(string $issuer): bool
+    {
+        $issuerParts = parse_url(url: $issuer);
+        $baseUrlParts = parse_url(url: $this->keycloakClientConfig->getBaseUrl());
+
+        if (!is_array($issuerParts) || !is_array($baseUrlParts)) {
+            return false;
+        }
+
+        $issuerScheme = strtolower((string) ($issuerParts['scheme'] ?? ''));
+        $baseScheme = strtolower((string) ($baseUrlParts['scheme'] ?? ''));
+        if ($issuerScheme === '' || $baseScheme === '' || $issuerScheme !== $baseScheme) {
+            return false;
+        }
+
+        $issuerHost = strtolower((string) ($issuerParts['host'] ?? ''));
+        $baseHost = strtolower((string) ($baseUrlParts['host'] ?? ''));
+        if ($issuerHost === '' || $baseHost === '' || $issuerHost !== $baseHost) {
+            return false;
+        }
+
+        $issuerPort = $issuerParts['port'] ?? $this->resolveDefaultPort(scheme: $issuerScheme);
+        $basePort = $baseUrlParts['port'] ?? $this->resolveDefaultPort(scheme: $baseScheme);
+        if ($issuerPort !== $basePort) {
+            return false;
+        }
+
+        $issuerPath = trim((string) ($issuerParts['path'] ?? ''), '/');
+        $basePath = trim((string) ($baseUrlParts['path'] ?? ''), '/');
+
+        if ($basePath !== '') {
+            if ($issuerPath === $basePath) {
+                return false;
+            }
+
+            if (!str_starts_with($issuerPath . '/', $basePath . '/')) {
+                return false;
+            }
+        }
+
+        $segments = explode(separator: '/', string: $issuerPath);
+        foreach ($segments as $index => $segment) {
+            if ($segment !== 'realms') {
+                continue;
+            }
+
+            $realm = $segments[$index + 1] ?? null;
+            if (is_string($realm) && $realm !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function resolveDefaultPort(string $scheme): ?int
+    {
+        return match ($scheme) {
+            'http' => 80,
+            'https' => 443,
+            default => null,
+        };
+    }
+
+    private function extractBearerToken(Request $request): ?string
+    {
+        $header = $request->headers->get('Authorization');
+        if (!is_string($header) || $header === '') {
+            return null;
+        }
+
+        if (!preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
+            return null;
+        }
+
+        $token = trim($matches[1]);
+        if ($token === '') {
+            return null;
+        }
+
+        return $token;
+    }
+}

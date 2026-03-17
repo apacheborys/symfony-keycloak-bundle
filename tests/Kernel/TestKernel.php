@@ -6,8 +6,10 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel;
 
 use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
@@ -44,7 +46,10 @@ final class TestKernel extends Kernel
                 {
                     $serviceId = KeycloakService::class;
                     $aliasId = KeycloakServiceInterface::class;
+                    $jwtAliasId = KeycloakJwtVerificationServiceInterface::class;
                     $mapperId = LocalEntityMapper::class;
+                    $authenticatorId = KeycloakJwtAuthenticator::class;
+                    $authenticatorAliasId = 'keycloak.jwt_authenticator';
 
                     if ($container->hasDefinition($serviceId)) {
                         $container->getDefinition($serviceId)->setPublic(true);
@@ -54,8 +59,20 @@ final class TestKernel extends Kernel
                         $container->getAlias($aliasId)->setPublic(true);
                     }
 
+                    if ($container->hasAlias($jwtAliasId)) {
+                        $container->getAlias($jwtAliasId)->setPublic(true);
+                    }
+
                     if ($container->hasDefinition($mapperId)) {
                         $container->getDefinition($mapperId)->setPublic(true);
+                    }
+
+                    if ($container->hasDefinition($authenticatorId)) {
+                        $container->getDefinition($authenticatorId)->setPublic(true);
+                    }
+
+                    if ($container->hasAlias($authenticatorAliasId)) {
+                        $container->getAlias($authenticatorAliasId)->setPublic(true);
                     }
                 }
             }
@@ -94,6 +111,8 @@ final class TestKernel extends Kernel
                 'user_entities' => [
                     LocalUser::class => [
                         'realm' => 'users-realm',
+                        'role_prefix' => 'payment.',
+                        'role_suffix' => '.svc',
                     ],
                 ],
             ]
