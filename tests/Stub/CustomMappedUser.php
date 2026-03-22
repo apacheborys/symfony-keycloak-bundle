@@ -9,18 +9,18 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use Override;
 
-final readonly class LocalUser implements KeycloakUserInterface
+final readonly class CustomMappedUser implements KeycloakUserInterface
 {
     public function __construct(
-        private string $id = '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
-        private string $username = 'local-username',
-        private string $email = 'local@example.test',
+        private string $id = 'f8c44ba7-4f23-4974-abf1-9f4685c8f5ad',
+        private string $username = 'custom-user',
+        private string $email = 'custom@example.test',
         private bool $emailVerified = true,
-        private string $firstName = 'Local',
+        private string $firstName = 'Custom',
         private string $lastName = 'User',
         private bool $enabled = true,
         /** @var string[] */
-        private array $roles = [],
+        private array $roles = ['ROLE_CUSTOM'],
     ) {
     }
 
