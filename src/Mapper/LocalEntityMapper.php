@@ -33,9 +33,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         $configs = [];
 
         foreach ($userEntityConfigs as $config) {
-            $className = str_replace('\\\\', '\\', $config->getClassName());
-
-            $configs[$className] = $config;
+            $configs[$$config->getClassName()] = $config;
         }
 
         $this->userEntityConfigs = $configs;
@@ -169,7 +167,10 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
     #[Override]
     public function support(KeycloakUserInterface $localUser): bool
     {
-        return isset($this->userEntityConfigs[$localUser::class]);
+        $userConfig = $this->userEntityConfigs[$localUser::class] ?? null;
+
+        return $userConfig instanceof UserEntityConfig
+            && $userConfig->getMapper() === self::class;
     }
 
     /**
@@ -243,6 +244,17 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         $userConfig = $this->userEntityConfigs[$localUser::class] ?? null;
         if ($userConfig === null) {
             throw new LogicException('No user entity configuration for ' . $localUser::class);
+        }
+
+        if ($userConfig->getMapper() !== self::class) {
+            throw new LogicException(
+                sprintf(
+                    'User entity "%s" is configured to use mapper "%s", not "%s".',
+                    $localUser::class,
+                    $userConfig->getMapper(),
+                    self::class
+                )
+            );
         }
 
         return $userConfig;

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
+use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
+
 final readonly class UserEntityConfig
 {
     public function __construct(
@@ -11,6 +13,7 @@ final readonly class UserEntityConfig
         private string $className,
         private string $rolePrefix = '',
         private string $roleSuffix = '',
+        private string $mapper = LocalEntityMapper::class,
     ) {
     }
 
@@ -32,5 +35,10 @@ final readonly class UserEntityConfig
     public function getRoleSuffix(): string
     {
         return $this->roleSuffix;
+    }
+
+    public function getMapper(): string
+    {
+        return $this->mapper;
     }
 }

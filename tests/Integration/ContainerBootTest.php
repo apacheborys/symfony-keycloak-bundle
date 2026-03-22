@@ -12,7 +12,9 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterfac
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
 use Override;
 use Ramsey\Uuid\Uuid;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -105,6 +107,28 @@ final class ContainerBootTest extends KernelTestCase
         self::assertCount(2, $dto->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
+    }
+
+    public function testCustomMapperConfigurationOverridesDefaultMapperSupport(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $localEntityMapper
+         */
+        $localEntityMapper = $container->get(LocalEntityMapper::class);
+        /**
+         * @var CustomMappedUserMapper $customMapper
+         */
+        $customMapper = $container->get(CustomMappedUserMapper::class);
+
+        $customUser = new CustomMappedUser();
+        $defaultUser = new LocalUser();
+
+        self::assertFalse($localEntityMapper->support($customUser));
+        self::assertTrue($customMapper->support($customUser));
+        self::assertTrue($localEntityMapper->support($defaultUser));
     }
 
     public function testUserEntityDeletionMapping(): void

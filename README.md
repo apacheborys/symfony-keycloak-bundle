@@ -38,6 +38,7 @@ keycloak_bridge:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
       role_prefix: 'payment.' # optional
       role_suffix: '.svc' # optional
+      mapper: Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper # optional
 ```
 
 If you omit any of the service IDs, the bundle will rely on container aliases for the corresponding PSR interfaces.
@@ -59,6 +60,10 @@ User mappers must implement `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakU
 and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` is wired when
 `user_entities` is configured.
 
+Per-entity mapper selection is supported via `user_entities.<Entity>.mapper`:
+- defaults to `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper`
+- can point to your custom mapper service class for specific entities
+
 `LocalEntityMapper` supports:
 - `getRealm`
 - `prepareLocalUserForKeycloakUserCreation`
@@ -78,8 +83,9 @@ Role synchronization mapping is also built in:
 - unknown roles become lightweight `RoleDto` objects and can be auto-created when
   `allow_role_creation: true`
 
-If your login flow needs custom fields/scope/grant behavior, register your own mapper
-implementation and tag it as `keycloak.local_user_mapper`.
+If your login flow needs custom fields/scope/grant behavior, point `user_entities.<Entity>.mapper`
+to your mapper class. The bundle will tag it as `keycloak.local_user_mapper` automatically.
+If your mapper needs custom constructor arguments, define it as a Symfony service explicitly.
 
 ## Security Authenticator
 

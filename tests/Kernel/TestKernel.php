@@ -10,7 +10,9 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterfac
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
 use Override;
@@ -48,6 +50,7 @@ final class TestKernel extends Kernel
                     $aliasId = KeycloakServiceInterface::class;
                     $jwtAliasId = KeycloakJwtVerificationServiceInterface::class;
                     $mapperId = LocalEntityMapper::class;
+                    $customMapperId = CustomMappedUserMapper::class;
                     $authenticatorId = KeycloakJwtAuthenticator::class;
                     $authenticatorAliasId = 'keycloak.jwt_authenticator';
 
@@ -65,6 +68,10 @@ final class TestKernel extends Kernel
 
                     if ($container->hasDefinition($mapperId)) {
                         $container->getDefinition($mapperId)->setPublic(true);
+                    }
+
+                    if ($container->hasDefinition($customMapperId)) {
+                        $container->getDefinition($customMapperId)->setPublic(true);
                     }
 
                     if ($container->hasDefinition($authenticatorId)) {
@@ -113,6 +120,10 @@ final class TestKernel extends Kernel
                         'realm' => 'users-realm',
                         'role_prefix' => 'payment.',
                         'role_suffix' => '.svc',
+                    ],
+                    CustomMappedUser::class => [
+                        'realm' => 'custom-realm',
+                        'mapper' => CustomMappedUserMapper::class,
                     ],
                 ],
             ]

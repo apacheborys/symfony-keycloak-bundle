@@ -57,6 +57,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                             ->scalarNode('realm')->isRequired()->cannotBeEmpty()->end()
                             ->scalarNode('role_prefix')->defaultValue('')->end()
                             ->scalarNode('role_suffix')->defaultValue('')->end()
+                            ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
                         ->end()
                     ->end()
                     ->defaultValue([])
@@ -81,7 +82,8 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  user_entities: array<string, array{
      *      realm: string,
      *      role_prefix: string,
-     *      role_suffix: string
+     *      role_suffix: string,
+     *      mapper: string
      *  }>
      * } $config
      */
@@ -177,32 +179,66 @@ final class KeycloakBridgeBundle extends AbstractBundle
             return;
         }
 
+        $configuredMapperClasses = [];
         foreach ($config['user_entities'] as $className => $userEntityConfig) {
+            $normalizedClassName = str_replace('\\\\', '\\', $className);
+            $mapperClass = str_replace('\\\\', '\\', $userEntityConfig['mapper']);
+
             $services
                 ->set(
-                    id: 'keycloak_bridge.user_entity_config.' . str_replace('\\', '_', $className),
+                    id: 'keycloak_bridge.user_entity_config.' . str_replace('\\', '_', $normalizedClassName),
                     class: UserEntityConfig::class
                 )
                 ->args(
                     arguments: [
                         $userEntityConfig['realm'],
-                        $className,
+                        $normalizedClassName,
                         $userEntityConfig['role_prefix'],
                         $userEntityConfig['role_suffix'],
+                        $mapperClass,
                     ]
                 )
                 ->tag(name: 'keycloak.user_entity_config');
+
+            $configuredMapperClasses[$mapperClass] = true;
         }
 
-        $services
-            ->set(id: LocalEntityMapper::class)
-            ->args(
-                arguments: [
-                    tagged_iterator(tag: 'keycloak.user_entity_config'),
-                    $config['client_id'],
-                    $config['client_secret'],
-                ]
-            )
-            ->tag(name: 'keycloak.local_user_mapper');
+        if (isset($configuredMapperClasses[LocalEntityMapper::class])) {
+            $services
+                ->set(id: LocalEntityMapper::class)
+                ->args(
+                    arguments: [
+                        tagged_iterator(tag: 'keycloak.user_entity_config'),
+                        $config['client_id'],
+                        $config['client_secret'],
+                    ]
+                )
+                ->tag(name: 'keycloak.local_user_mapper');
+        }
+
+        foreach (array_keys($configuredMapperClasses) as $mapperClass) {
+            if ($mapperClass === LocalEntityMapper::class) {
+                continue;
+            }
+
+            if ($builder->hasDefinition($mapperClass)) {
+                $definition = $builder->getDefinition($mapperClass);
+                if (!$definition->hasTag('keycloak.local_user_mapper')) {
+                    $definition->addTag('keycloak.local_user_mapper');
+                }
+
+                continue;
+            }
+
+            if ($builder->hasAlias($mapperClass)) {
+                continue;
+            }
+
+            $services
+                ->set(id: $mapperClass, class: $mapperClass)
+                ->autowire()
+                ->autoconfigure()
+                ->tag(name: 'keycloak.local_user_mapper');
+        }
     }
 }
