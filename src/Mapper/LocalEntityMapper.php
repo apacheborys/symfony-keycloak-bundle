@@ -33,7 +33,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         $configs = [];
 
         foreach ($userEntityConfigs as $config) {
-            $configs[$$config->getClassName()] = $config;
+            $configs[$config->getClassName()] = $config;
         }
 
         $this->userEntityConfigs = $configs;
