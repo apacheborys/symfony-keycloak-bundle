@@ -14,6 +14,7 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakRealmServiceInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceFactory;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
@@ -55,6 +56,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     ->arrayPrototype()
                         ->children()
                             ->scalarNode('realm')->isRequired()->cannotBeEmpty()->end()
+                            ->scalarNode('user_identifier_field')->isRequired()->cannotBeEmpty()->end()
                             ->scalarNode('role_prefix')->defaultValue('')->end()
                             ->scalarNode('role_suffix')->defaultValue('')->end()
                             ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
@@ -81,6 +83,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  realm_list_ttl: int,
      *  user_entities: array<string, array{
      *      realm: string,
+     *      user_identifier_field: string,
      *      role_prefix: string,
      *      role_suffix: string,
      *      mapper: string
@@ -160,6 +163,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
 
         $services->alias(id: KeycloakServiceInterface::class, referencedId: KeycloakService::class);
         $services->alias(id: KeycloakUserManagementServiceInterface::class, referencedId: KeycloakService::class);
+        $services->alias(
+            id: KeycloakUserIdentifierAttributeServiceInterface::class,
+            referencedId: KeycloakService::class
+        );
         $services->alias(id: KeycloakOidcAuthenticationServiceInterface::class, referencedId: KeycloakService::class);
         $services->alias(id: KeycloakJwtVerificationServiceInterface::class, referencedId: KeycloakService::class);
         $services->alias(id: KeycloakRealmServiceInterface::class, referencedId: KeycloakService::class);
@@ -193,6 +200,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     arguments: [
                         $userEntityConfig['realm'],
                         $normalizedClassName,
+                        $userEntityConfig['user_identifier_field'],
                         $userEntityConfig['role_prefix'],
                         $userEntityConfig['role_suffix'],
                         $mapperClass,

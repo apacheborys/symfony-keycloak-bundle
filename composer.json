@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "apacheborys/keycloak-php-client": "^0.0.9",
+        "apacheborys/keycloak-php-client": "^0.0.10",
         "symfony/config": "^7.4",
         "symfony/dependency-injection": "^7.4",
         "symfony/framework-bundle": "^7.4",
@@ -39,7 +39,7 @@
     "prefer-stable": true,
     "scripts": {
         "phpcs": "phpcs --standard=phpcs.xml",
-        "phpstan": "phpstan analyse -c phpstan.neon",
+        "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=512M",
         "rector": "rector process --dry-run",
         "test": "phpunit",
         "check": [

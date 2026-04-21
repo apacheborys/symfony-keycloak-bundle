@@ -36,6 +36,7 @@ keycloak_bridge:
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
+      user_identifier_field: 'localIdentifier'
       role_prefix: 'payment.' # optional
       role_suffix: '.svc' # optional
       mapper: Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper # optional
@@ -52,6 +53,7 @@ You can autowire these interfaces:
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakOidcAuthenticationServiceInterface`
+- `Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakRealmServiceInterface`
 - `Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator`
@@ -63,6 +65,11 @@ and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` 
 Per-entity mapper selection is supported via `user_entities.<Entity>.mapper`:
 - defaults to `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper`
 - can point to your custom mapper service class for specific entities
+
+Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
+- it must point to a real property on the configured local user entity
+- it is intended to be the canonical local-to-Keycloak reference field
+- the bundle validates the property eagerly during container build
 
 `LocalEntityMapper` supports:
 - `getRealm`

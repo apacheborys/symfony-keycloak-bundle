@@ -9,8 +9,10 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
@@ -73,6 +75,7 @@ final class ContainerBootTest extends KernelTestCase
         self::assertTrue($container->has(KeycloakServiceInterface::class));
         self::assertTrue($container->has(KeycloakHttpClientInterface::class));
         self::assertTrue($container->has(KeycloakJwtVerificationServiceInterface::class));
+        self::assertTrue($container->has(KeycloakUserIdentifierAttributeServiceInterface::class));
         self::assertTrue($container->has(KeycloakJwtAuthenticator::class));
         self::assertInstanceOf(KeycloakJwtAuthenticator::class, $container->get(KeycloakJwtAuthenticator::class));
     }
@@ -129,6 +132,21 @@ final class ContainerBootTest extends KernelTestCase
         self::assertFalse($localEntityMapper->support($customUser));
         self::assertTrue($customMapper->support($customUser));
         self::assertTrue($localEntityMapper->support($defaultUser));
+    }
+
+    public function testUserEntityConfigResolvesConfiguredIdentifierField(): void
+    {
+        $userEntityConfig = new UserEntityConfig(
+            realm: 'users-realm',
+            className: LocalUser::class,
+            userIdentifierField: 'localIdentifier',
+        );
+
+        self::assertSame('localIdentifier', $userEntityConfig->getUserIdentifierField());
+        self::assertSame(
+            'local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326',
+            $userEntityConfig->resolveUserIdentifierValue(new LocalUser())
+        );
     }
 
     public function testUserEntityDeletionMapping(): void
