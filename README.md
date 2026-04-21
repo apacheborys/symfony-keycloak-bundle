@@ -70,6 +70,7 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 - it must point to a real property on the configured local user entity
 - it is intended to be the canonical local-to-Keycloak reference field
 - the bundle validates the property eagerly during container build
+- the default mapper projects it into Keycloak user `attributes` using the same attribute name
 
 `LocalEntityMapper` supports:
 - `getRealm`
@@ -82,6 +83,9 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 - entity realm from `user_entities`
 - `client_id` and `client_secret` from bundle config
 - local user username + provided plain password
+
+`prepareLocalUserForKeycloakUserCreation` and `prepareLocalUserDiffForKeycloakUserUpdate`
+also map `user_identifier_field` into Keycloak user attributes.
 
 Role synchronization mapping is also built in:
 - local Symfony role names are projected to `RoleDto`

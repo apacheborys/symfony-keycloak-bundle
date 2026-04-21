@@ -110,6 +110,10 @@ final class ContainerBootTest extends KernelTestCase
         self::assertCount(2, $dto->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
+        self::assertSame(
+            ['localIdentifier' => ['local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326']],
+            $dto->getAttributes()
+        );
     }
 
     public function testCustomMapperConfigurationOverridesDefaultMapperSupport(): void
@@ -205,6 +209,7 @@ final class ContainerBootTest extends KernelTestCase
         $newUser = new LocalUser(
             email: 'after@example.test',
             firstName: 'After',
+            localIdentifier: 'updated-local-user-reference',
             roles: ['ROLE_USER', 'ROLE_ADMIN'],
         );
 
@@ -230,5 +235,9 @@ final class ContainerBootTest extends KernelTestCase
         self::assertCount(2, $dto->getProfile()->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getProfile()->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getProfile()->getRoles()[1]->getName());
+        self::assertSame(
+            ['localIdentifier' => ['updated-local-user-reference']],
+            $dto->getProfile()->getAttributes()
+        );
     }
 }
