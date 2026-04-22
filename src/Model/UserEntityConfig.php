@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
+use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use BackedEnum;
 use InvalidArgumentException;
@@ -24,6 +25,10 @@ final readonly class UserEntityConfig
         private string $rolePrefix = '',
         private string $roleSuffix = '',
         private string $mapper = LocalEntityMapper::class,
+        private ?string $attributeName = null,
+        private ?string $jwtClaimName = null,
+        private bool $exposeInJwt = false,
+        private bool $createIfMissing = false,
     ) {
         if (!class_exists($className)) {
             throw new InvalidArgumentException(
@@ -36,6 +41,14 @@ final readonly class UserEntityConfig
 
         if ($this->userIdentifierField === '') {
             throw new InvalidArgumentException('The "userIdentifierField" configuration value cannot be empty.');
+        }
+
+        if ($this->attributeName !== null && trim($this->attributeName) === '') {
+            throw new InvalidArgumentException('The "attributeName" configuration value cannot be blank.');
+        }
+
+        if ($this->jwtClaimName !== null && trim($this->jwtClaimName) === '') {
+            throw new InvalidArgumentException('The "jwtClaimName" configuration value cannot be blank.');
         }
 
         $identifierProperty = $this->resolveIdentifierProperty();
@@ -78,6 +91,42 @@ final readonly class UserEntityConfig
     public function getMapper(): string
     {
         return $this->mapper;
+    }
+
+    public function getUserIdentifierAttributeName(): string
+    {
+        return $this->attributeName ?? $this->userIdentifierField;
+    }
+
+    public function getJwtClaimName(): ?string
+    {
+        return $this->jwtClaimName;
+    }
+
+    public function shouldExposeInJwt(): bool
+    {
+        return $this->exposeInJwt;
+    }
+
+    public function shouldCreateIfMissing(): bool
+    {
+        return $this->createIfMissing;
+    }
+
+    public function shouldEnsureUserIdentifierAttribute(): bool
+    {
+        return $this->exposeInJwt || $this->createIfMissing;
+    }
+
+    public function buildEnsureUserIdentifierAttributeDto(): EnsureUserIdentifierAttributeDto
+    {
+        return new EnsureUserIdentifierAttributeDto(
+            attributeName: $this->getUserIdentifierAttributeName(),
+            displayName: $this->buildAttributeDisplayName(),
+            createIfMissing: $this->createIfMissing,
+            exposeInJwt: $this->exposeInJwt,
+            jwtClaimName: $this->jwtClaimName,
+        );
     }
 
     public function resolveUserIdentifierValue(object $localUser): string
@@ -147,5 +196,10 @@ final readonly class UserEntityConfig
         }
 
         return $value;
+    }
+
+    private function buildAttributeDisplayName(): string
+    {
+        return ucwords(str_replace(['-', '_', '.'], ' ', $this->getUserIdentifierAttributeName()));
     }
 }

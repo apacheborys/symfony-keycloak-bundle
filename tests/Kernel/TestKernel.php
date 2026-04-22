@@ -11,6 +11,7 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\ConfiguredKeycloakService;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
@@ -55,9 +56,14 @@ final class TestKernel extends Kernel
                     $customMapperId = CustomMappedUserMapper::class;
                     $authenticatorId = KeycloakJwtAuthenticator::class;
                     $authenticatorAliasId = 'keycloak.jwt_authenticator';
+                    $configuredServiceId = ConfiguredKeycloakService::class;
 
                     if ($container->hasDefinition($serviceId)) {
                         $container->getDefinition($serviceId)->setPublic(true);
+                    }
+
+                    if ($container->hasDefinition($configuredServiceId)) {
+                        $container->getDefinition($configuredServiceId)->setPublic(true);
                     }
 
                     if ($container->hasAlias($aliasId)) {
@@ -125,12 +131,17 @@ final class TestKernel extends Kernel
                     LocalUser::class => [
                         'realm' => 'users-realm',
                         'user_identifier_field' => 'localIdentifier',
+                        'attribute_name' => 'local-user-id',
+                        'jwt_claim_name' => 'local_user_id',
+                        'expose_in_jwt' => true,
+                        'create_if_missing' => true,
                         'role_prefix' => 'payment.',
                         'role_suffix' => '.svc',
                     ],
                     CustomMappedUser::class => [
                         'realm' => 'custom-realm',
                         'user_identifier_field' => 'externalIdentifier',
+                        'attribute_name' => 'external-user-id',
                         'mapper' => CustomMappedUserMapper::class,
                     ],
                 ],

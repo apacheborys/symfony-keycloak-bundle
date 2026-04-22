@@ -37,6 +37,10 @@ keycloak_bridge:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
       user_identifier_field: 'localIdentifier'
+      attribute_name: 'local-user-id' # optional, defaults to user_identifier_field
+      jwt_claim_name: 'local_user_id' # optional, used when expose_in_jwt=true
+      expose_in_jwt: true # optional
+      create_if_missing: true # optional
       role_prefix: 'payment.' # optional
       role_suffix: '.svc' # optional
       mapper: Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper # optional
@@ -70,7 +74,13 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 - it must point to a real property on the configured local user entity
 - it is intended to be the canonical local-to-Keycloak reference field
 - the bundle validates the property eagerly during container build
-- the default mapper projects it into Keycloak user `attributes` using the same attribute name
+- the default mapper projects it into Keycloak user `attributes`
+
+Optional attribute management settings are available per entity:
+- `attribute_name` changes the Keycloak attribute name and defaults to `user_identifier_field`
+- `create_if_missing` makes the bundle create the Keycloak user-profile attribute before `createUser`, `updateUser`, and `loginUser`
+- `expose_in_jwt` makes the bundle configure a Keycloak protocol mapper so the attribute is emitted into JWT payloads
+- `jwt_claim_name` overrides the JWT claim name used by that protocol mapper
 
 `LocalEntityMapper` supports:
 - `getRealm`
@@ -85,7 +95,8 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 - local user username + provided plain password
 
 `prepareLocalUserForKeycloakUserCreation` and `prepareLocalUserDiffForKeycloakUserUpdate`
-also map `user_identifier_field` into Keycloak user attributes.
+also map the configured identifier into Keycloak user attributes. When `attribute_name` is set,
+that name is used instead of the local property name.
 
 Role synchronization mapping is also built in:
 - local Symfony role names are projected to `RoleDto`

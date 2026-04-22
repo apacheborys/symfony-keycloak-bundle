@@ -175,7 +175,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
     #[Override]
     public function support(KeycloakUserInterface $localUser): bool
     {
-        $userConfig = $this->userEntityConfigs[$localUser::class] ?? null;
+        $userConfig = $this->findUserConfig(localUser: $localUser);
 
         return $userConfig instanceof UserEntityConfig
             && $userConfig->getMapper() === self::class;
@@ -217,7 +217,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         UserEntityConfig $userConfig
     ): array {
         return [
-            $userConfig->getUserIdentifierField() => $userConfig->resolveUserIdentifierValue($localUser),
+            $userConfig->getUserIdentifierAttributeName() => $userConfig->resolveUserIdentifierValue($localUser),
         ];
     }
 
@@ -261,7 +261,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
 
     private function getUserConfig(KeycloakUserInterface $localUser): UserEntityConfig
     {
-        $userConfig = $this->userEntityConfigs[$localUser::class] ?? null;
+        $userConfig = $this->findUserConfig(localUser: $localUser);
         if ($userConfig === null) {
             throw new LogicException('No user entity configuration for ' . $localUser::class);
         }
@@ -278,5 +278,21 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         }
 
         return $userConfig;
+    }
+
+    private function findUserConfig(KeycloakUserInterface $localUser): ?UserEntityConfig
+    {
+        $directMatch = $this->userEntityConfigs[$localUser::class] ?? null;
+        if ($directMatch instanceof UserEntityConfig) {
+            return $directMatch;
+        }
+
+        foreach ($this->userEntityConfigs as $configuredClass => $userEntityConfig) {
+            if ($localUser instanceof $configuredClass) {
+                return $userEntityConfig;
+            }
+        }
+
+        return null;
     }
 }

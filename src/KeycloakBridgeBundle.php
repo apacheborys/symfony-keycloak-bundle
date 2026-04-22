@@ -20,6 +20,7 @@ use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\ConfiguredKeycloakService;
 use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -57,6 +58,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
                         ->children()
                             ->scalarNode('realm')->isRequired()->cannotBeEmpty()->end()
                             ->scalarNode('user_identifier_field')->isRequired()->cannotBeEmpty()->end()
+                            ->scalarNode('attribute_name')->defaultNull()->end()
+                            ->scalarNode('jwt_claim_name')->defaultNull()->end()
+                            ->booleanNode('expose_in_jwt')->defaultFalse()->end()
+                            ->booleanNode('create_if_missing')->defaultFalse()->end()
                             ->scalarNode('role_prefix')->defaultValue('')->end()
                             ->scalarNode('role_suffix')->defaultValue('')->end()
                             ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
@@ -84,6 +89,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  user_entities: array<string, array{
      *      realm: string,
      *      user_identifier_field: string,
+     *      attribute_name: string|null,
+     *      jwt_claim_name: string|null,
+     *      expose_in_jwt: bool,
+     *      create_if_missing: bool,
      *      role_prefix: string,
      *      role_suffix: string,
      *      mapper: string
@@ -161,15 +170,33 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ]
             );
 
-        $services->alias(id: KeycloakServiceInterface::class, referencedId: KeycloakService::class);
-        $services->alias(id: KeycloakUserManagementServiceInterface::class, referencedId: KeycloakService::class);
+        $services
+            ->set(id: ConfiguredKeycloakService::class)
+            ->args(
+                arguments: [
+                    service(serviceId: KeycloakService::class),
+                    tagged_iterator(tag: 'keycloak.user_entity_config'),
+                ]
+            );
+
+        $services->alias(id: KeycloakServiceInterface::class, referencedId: ConfiguredKeycloakService::class);
+        $services->alias(
+            id: KeycloakUserManagementServiceInterface::class,
+            referencedId: ConfiguredKeycloakService::class
+        );
         $services->alias(
             id: KeycloakUserIdentifierAttributeServiceInterface::class,
-            referencedId: KeycloakService::class
+            referencedId: ConfiguredKeycloakService::class
         );
-        $services->alias(id: KeycloakOidcAuthenticationServiceInterface::class, referencedId: KeycloakService::class);
-        $services->alias(id: KeycloakJwtVerificationServiceInterface::class, referencedId: KeycloakService::class);
-        $services->alias(id: KeycloakRealmServiceInterface::class, referencedId: KeycloakService::class);
+        $services->alias(
+            id: KeycloakOidcAuthenticationServiceInterface::class,
+            referencedId: ConfiguredKeycloakService::class
+        );
+        $services->alias(
+            id: KeycloakJwtVerificationServiceInterface::class,
+            referencedId: ConfiguredKeycloakService::class
+        );
+        $services->alias(id: KeycloakRealmServiceInterface::class, referencedId: ConfiguredKeycloakService::class);
 
         $services
             ->set(id: KeycloakJwtAuthenticator::class)
@@ -204,6 +231,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
                         $userEntityConfig['role_prefix'],
                         $userEntityConfig['role_suffix'],
                         $mapperClass,
+                        $userEntityConfig['attribute_name'],
+                        $userEntityConfig['jwt_claim_name'],
+                        $userEntityConfig['expose_in_jwt'],
+                        $userEntityConfig['create_if_missing'],
                     ]
                 )
                 ->tag(name: 'keycloak.user_entity_config');
