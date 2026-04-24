@@ -83,7 +83,7 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 `attributes_map` lets you project any local entity property into Keycloak user attributes:
 - `property` is the local entity property name
 - `attribute_name` changes the Keycloak attribute name and defaults to `property`
-- `create_if_missing` makes the bundle create the Keycloak user-profile attribute before `createUser`, `updateUser`, and `loginUser`
+- `create_if_missing` is declarative metadata for explicit synchronization flows; the bundle does not auto-apply Keycloak schema changes during runtime requests
 - `jwt_claim_name` configures JWT exposure for that attribute and defines the claim name used in payloads
 - the same property cannot be declared twice inside one entity config
 - the same Keycloak attribute name cannot be declared twice inside one entity config
@@ -113,6 +113,12 @@ Role synchronization mapping is also built in:
 If your login flow needs custom fields/scope/grant behavior, point `user_entities.<Entity>.mapper`
 to your mapper class. The bundle will tag it as `keycloak.local_user_mapper` automatically.
 If your mapper needs custom constructor arguments, define it as a Symfony service explicitly.
+
+The bundle does not implicitly call `ensureUserIdentifierAttribute()` during `createUser`, `updateUser`,
+or `loginUser`. Keeping Keycloak user-profile attributes and protocol mappers in a consistent state is
+an application/deployment responsibility. If you want explicit synchronization, call
+`Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface` yourself at the
+appropriate lifecycle stage.
 
 ## Security Authenticator
 

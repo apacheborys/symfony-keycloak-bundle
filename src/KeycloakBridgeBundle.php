@@ -20,7 +20,6 @@ use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Service\ConfiguredKeycloakService;
 use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -179,33 +178,15 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ]
             );
 
-        $services
-            ->set(id: ConfiguredKeycloakService::class)
-            ->args(
-                arguments: [
-                    service(serviceId: KeycloakService::class),
-                    tagged_iterator(tag: 'keycloak.user_entity_config'),
-                ]
-            );
-
-        $services->alias(id: KeycloakServiceInterface::class, referencedId: ConfiguredKeycloakService::class);
-        $services->alias(
-            id: KeycloakUserManagementServiceInterface::class,
-            referencedId: ConfiguredKeycloakService::class
-        );
+        $services->alias(id: KeycloakServiceInterface::class, referencedId: KeycloakService::class);
+        $services->alias(id: KeycloakUserManagementServiceInterface::class, referencedId: KeycloakService::class);
         $services->alias(
             id: KeycloakUserIdentifierAttributeServiceInterface::class,
-            referencedId: ConfiguredKeycloakService::class
+            referencedId: KeycloakService::class
         );
-        $services->alias(
-            id: KeycloakOidcAuthenticationServiceInterface::class,
-            referencedId: ConfiguredKeycloakService::class
-        );
-        $services->alias(
-            id: KeycloakJwtVerificationServiceInterface::class,
-            referencedId: ConfiguredKeycloakService::class
-        );
-        $services->alias(id: KeycloakRealmServiceInterface::class, referencedId: ConfiguredKeycloakService::class);
+        $services->alias(id: KeycloakOidcAuthenticationServiceInterface::class, referencedId: KeycloakService::class);
+        $services->alias(id: KeycloakJwtVerificationServiceInterface::class, referencedId: KeycloakService::class);
+        $services->alias(id: KeycloakRealmServiceInterface::class, referencedId: KeycloakService::class);
 
         $services
             ->set(id: KeycloakJwtAuthenticator::class)

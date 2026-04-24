@@ -13,7 +13,6 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Service\ConfiguredKeycloakService;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
@@ -71,9 +70,8 @@ final class ContainerBootTest extends KernelTestCase
         $container = static::getContainer();
         $service = $container->get(KeycloakServiceInterface::class);
 
-        self::assertInstanceOf(ConfiguredKeycloakService::class, $service);
-        self::assertInstanceOf(KeycloakService::class, $container->get(KeycloakService::class));
-        self::assertNotSame($container->get(KeycloakService::class), $service);
+        self::assertInstanceOf(KeycloakService::class, $service);
+        self::assertSame($container->get(KeycloakService::class), $service);
 
         self::assertTrue($container->has(KeycloakServiceInterface::class));
         self::assertTrue($container->has(KeycloakHttpClientInterface::class));

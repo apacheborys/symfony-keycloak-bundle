@@ -11,7 +11,6 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Service\ConfiguredKeycloakService;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
@@ -56,14 +55,9 @@ final class TestKernel extends Kernel
                     $customMapperId = CustomMappedUserMapper::class;
                     $authenticatorId = KeycloakJwtAuthenticator::class;
                     $authenticatorAliasId = 'keycloak.jwt_authenticator';
-                    $configuredServiceId = ConfiguredKeycloakService::class;
 
                     if ($container->hasDefinition($serviceId)) {
                         $container->getDefinition($serviceId)->setPublic(true);
-                    }
-
-                    if ($container->hasDefinition($configuredServiceId)) {
-                        $container->getDefinition($configuredServiceId)->setPublic(true);
                     }
 
                     if ($container->hasAlias($aliasId)) {
