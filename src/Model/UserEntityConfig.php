@@ -103,6 +103,19 @@ final readonly class UserEntityConfig
         return $this->jwtClaimName;
     }
 
+    /**
+     * @return list<string>
+     */
+    public function getUserIdentifierJwtClaimNames(): array
+    {
+        $effectiveJwtClaimName = $this->buildEnsureUserIdentifierAttributeDto()->getJwtClaimName();
+
+        return array_keys([
+            $effectiveJwtClaimName => true,
+            $this->getUserIdentifierAttributeName() => true,
+        ]);
+    }
+
     public function shouldExposeInJwt(): bool
     {
         return $this->exposeInJwt;

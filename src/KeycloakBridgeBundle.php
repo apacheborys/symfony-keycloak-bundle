@@ -204,6 +204,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 arguments: [
                     service(serviceId: KeycloakJwtVerificationServiceInterface::class),
                     service(serviceId: KeycloakClientConfig::class),
+                    tagged_iterator(tag: 'keycloak.user_entity_config'),
                 ]
             );
 

@@ -26,6 +26,7 @@ final class UserEntityConfigTest extends TestCase
         self::assertSame('localIdentifier', $config->getUserIdentifierField());
         self::assertSame('local-user-id', $config->getUserIdentifierAttributeName());
         self::assertSame('local_user_id', $config->getJwtClaimName());
+        self::assertSame(['local_user_id', 'local-user-id'], $config->getUserIdentifierJwtClaimNames());
         self::assertTrue($config->shouldExposeInJwt());
         self::assertTrue($config->shouldCreateIfMissing());
         self::assertTrue($config->shouldEnsureUserIdentifierAttribute());
@@ -60,6 +61,7 @@ final class UserEntityConfigTest extends TestCase
 
         self::assertSame('localIdentifier', $config->getUserIdentifierAttributeName());
         self::assertNull($config->getJwtClaimName());
+        self::assertSame(['localIdentifier'], $config->getUserIdentifierJwtClaimNames());
         self::assertFalse($config->shouldExposeInJwt());
         self::assertFalse($config->shouldCreateIfMissing());
         self::assertFalse($config->shouldEnsureUserIdentifierAttribute());

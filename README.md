@@ -117,6 +117,7 @@ It:
 - reads bearer JWT from `Authorization` header
 - checks token `iss` matches configured Keycloak `base_url`
 - verifies signature and temporal claims via `KeycloakJwtVerificationServiceInterface`
+- resolves Symfony user identifier from custom JWT payload claims configured via `attribute_name` / `jwt_claim_name`
 - converts Keycloak realm/resource roles into Symfony user roles
 
 Example firewall setup:
