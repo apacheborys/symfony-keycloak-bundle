@@ -114,7 +114,10 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
         self::assertSame(
-            ['local-user-id' => ['local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326']],
+            [
+                'local-user-id' => ['local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['Local'],
+            ],
             $dto->getAttributes()
         );
     }
@@ -147,25 +150,35 @@ final class ContainerBootTest extends KernelTestCase
             realm: 'users-realm',
             className: LocalUser::class,
             userIdentifierField: 'localIdentifier',
-            attributeName: 'local-user-id',
-            jwtClaimName: 'local_user_id',
-            exposeInJwt: true,
-            createIfMissing: true,
+            attributesMap: [
+                [
+                    'property' => 'localIdentifier',
+                    'attribute_name' => 'local-user-id',
+                    'jwt_claim_name' => 'local_user_id',
+                    'create_if_missing' => true,
+                ],
+                [
+                    'property' => 'firstName',
+                    'attribute_name' => 'profile-first-name',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => true,
+                ],
+            ],
         );
 
         self::assertSame('localIdentifier', $userEntityConfig->getUserIdentifierField());
-        self::assertSame('local-user-id', $userEntityConfig->getUserIdentifierAttributeName());
-        self::assertSame('local_user_id', $userEntityConfig->getJwtClaimName());
-        self::assertTrue($userEntityConfig->shouldExposeInJwt());
-        self::assertTrue($userEntityConfig->shouldCreateIfMissing());
-        self::assertTrue($userEntityConfig->shouldEnsureUserIdentifierAttribute());
+        self::assertCount(2, $userEntityConfig->getAttributeConfigs());
+        self::assertSame(['local-user-id', 'local_user_id'], $userEntityConfig->getUserIdentifierJwtClaimNames());
         self::assertSame(
             'local-user-id',
             $userEntityConfig->buildEnsureUserIdentifierAttributeDto()->getAttributeName()
         );
         self::assertSame(
-            'local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326',
-            $userEntityConfig->resolveUserIdentifierValue(new LocalUser())
+            [
+                'local-user-id' => 'local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326',
+                'profile-first-name' => 'Local',
+            ],
+            $userEntityConfig->resolveMappedAttributes(new LocalUser())
         );
     }
 
@@ -252,7 +265,10 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('payment.ROLE_USER.svc', $dto->getProfile()->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getProfile()->getRoles()[1]->getName());
         self::assertSame(
-            ['local-user-id' => ['updated-local-user-reference']],
+            [
+                'local-user-id' => ['updated-local-user-reference'],
+                'profile-first-name' => ['After'],
+            ],
             $dto->getProfile()->getAttributes()
         );
     }

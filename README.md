@@ -37,10 +37,14 @@ keycloak_bridge:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
       user_identifier_field: 'localIdentifier'
-      attribute_name: 'local-user-id' # optional, defaults to user_identifier_field
-      jwt_claim_name: 'local_user_id' # optional, used when expose_in_jwt=true
-      expose_in_jwt: true # optional
-      create_if_missing: true # optional
+      attributes_map:
+        - property: 'localIdentifier'
+          attribute_name: 'local-user-id'
+          jwt_claim_name: 'local_user_id' # optional, implies JWT exposure
+          create_if_missing: true # optional
+        - property: 'firstName'
+          attribute_name: 'profile-first-name'
+          create_if_missing: true # optional
       role_prefix: 'payment.' # optional
       role_suffix: '.svc' # optional
       mapper: Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper # optional
@@ -74,13 +78,15 @@ Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
 - it must point to a real property on the configured local user entity
 - it is intended to be the canonical local-to-Keycloak reference field
 - the bundle validates the property eagerly during container build
-- the default mapper projects it into Keycloak user `attributes`
+- the field is automatically represented inside `attributes_map`, even if you do not declare it explicitly
 
-Optional attribute management settings are available per entity:
-- `attribute_name` changes the Keycloak attribute name and defaults to `user_identifier_field`
+`attributes_map` lets you project any local entity property into Keycloak user attributes:
+- `property` is the local entity property name
+- `attribute_name` changes the Keycloak attribute name and defaults to `property`
 - `create_if_missing` makes the bundle create the Keycloak user-profile attribute before `createUser`, `updateUser`, and `loginUser`
-- `expose_in_jwt` makes the bundle configure a Keycloak protocol mapper so the attribute is emitted into JWT payloads
-- `jwt_claim_name` overrides the JWT claim name used by that protocol mapper
+- `jwt_claim_name` configures JWT exposure for that attribute and defines the claim name used in payloads
+- the same property cannot be declared twice inside one entity config
+- the same Keycloak attribute name cannot be declared twice inside one entity config
 
 `LocalEntityMapper` supports:
 - `getRealm`
@@ -95,8 +101,7 @@ Optional attribute management settings are available per entity:
 - local user username + provided plain password
 
 `prepareLocalUserForKeycloakUserCreation` and `prepareLocalUserDiffForKeycloakUserUpdate`
-also map the configured identifier into Keycloak user attributes. When `attribute_name` is set,
-that name is used instead of the local property name.
+map all configured `attributes_map` properties into Keycloak user attributes.
 
 Role synchronization mapping is also built in:
 - local Symfony role names are projected to `RoleDto`
@@ -117,7 +122,7 @@ It:
 - reads bearer JWT from `Authorization` header
 - checks token `iss` matches configured Keycloak `base_url`
 - verifies signature and temporal claims via `KeycloakJwtVerificationServiceInterface`
-- resolves Symfony user identifier from custom JWT payload claims configured via `attribute_name` / `jwt_claim_name`
+- resolves Symfony user identifier from the JWT claim configured for the `attributes_map` entry that matches `user_identifier_field`
 - converts Keycloak realm/resource roles into Symfony user roles
 
 Example firewall setup:

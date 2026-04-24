@@ -12,6 +12,7 @@ use Apacheborys\KeycloakPhpClient\Entity\KeycloakRealm;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUser;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityAttributeConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Override;
 
@@ -38,7 +39,7 @@ final readonly class ConfiguredKeycloakService implements KeycloakServiceInterfa
     #[Override]
     public function createUser(KeycloakUserInterface $localUser, PasswordDto $passwordDto): KeycloakUser
     {
-        $this->ensureConfiguredUserIdentifierAttribute(localUser: $localUser);
+        $this->ensureConfiguredAttributes(localUser: $localUser);
 
         return $this->inner->createUser(localUser: $localUser, passwordDto: $passwordDto);
     }
@@ -48,7 +49,7 @@ final readonly class ConfiguredKeycloakService implements KeycloakServiceInterfa
         KeycloakUserInterface $oldUserVersion,
         KeycloakUserInterface $newUserVersion
     ): KeycloakUser {
-        $this->ensureConfiguredUserIdentifierAttribute(localUser: $newUserVersion);
+        $this->ensureConfiguredAttributes(localUser: $newUserVersion);
 
         return $this->inner->updateUser(
             oldUserVersion: $oldUserVersion,
@@ -88,7 +89,7 @@ final readonly class ConfiguredKeycloakService implements KeycloakServiceInterfa
     #[Override]
     public function loginUser(KeycloakUserInterface $user, string $plainPassword): OidcTokenResponseDto
     {
-        $this->ensureConfiguredUserIdentifierAttribute(localUser: $user);
+        $this->ensureConfiguredAttributes(localUser: $user);
 
         return $this->inner->loginUser(user: $user, plainPassword: $plainPassword);
     }
@@ -99,17 +100,23 @@ final readonly class ConfiguredKeycloakService implements KeycloakServiceInterfa
         return $this->inner->refreshToken(dto: $dto);
     }
 
-    private function ensureConfiguredUserIdentifierAttribute(KeycloakUserInterface $localUser): void
+    private function ensureConfiguredAttributes(KeycloakUserInterface $localUser): void
     {
         $userConfig = $this->findUserConfig(localUser: $localUser);
-        if (!$userConfig instanceof UserEntityConfig || !$userConfig->shouldEnsureUserIdentifierAttribute()) {
+        if (!$userConfig instanceof UserEntityConfig) {
             return;
         }
 
-        $this->inner->ensureUserIdentifierAttribute(
-            localUser: $localUser,
-            dto: $userConfig->buildEnsureUserIdentifierAttributeDto(),
-        );
+        foreach ($userConfig->getAttributeConfigs() as $attributeConfig) {
+            if (!$attributeConfig instanceof UserEntityAttributeConfig || !$attributeConfig->shouldEnsureAttribute()) {
+                continue;
+            }
+
+            $this->inner->ensureUserIdentifierAttribute(
+                localUser: $localUser,
+                dto: $attributeConfig->buildEnsureAttributeDto(),
+            );
+        }
     }
 
     private function findUserConfig(KeycloakUserInterface $localUser): ?UserEntityConfig

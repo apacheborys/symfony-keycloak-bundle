@@ -27,37 +27,55 @@ final class ConfiguredKeycloakServiceTest extends TestCase
             realm: 'users-realm',
             className: LocalUser::class,
             userIdentifierField: 'localIdentifier',
-            attributeName: 'local-user-id',
-            jwtClaimName: 'local_user_id',
-            exposeInJwt: true,
-            createIfMissing: true,
+            attributesMap: [
+                [
+                    'property' => 'localIdentifier',
+                    'attribute_name' => 'local-user-id',
+                    'jwt_claim_name' => 'local_user_id',
+                    'create_if_missing' => true,
+                ],
+                [
+                    'property' => 'firstName',
+                    'attribute_name' => 'profile-first-name',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => true,
+                ],
+            ],
         );
 
-        $ensured = false;
+        $ensureCalls = 0;
         $inner = $this->createMock(KeycloakServiceInterface::class);
         $inner
-            ->expects(self::once())
+            ->expects(self::exactly(2))
             ->method('ensureUserIdentifierAttribute')
             ->with(
                 $user,
-                self::callback(static function ($dto): bool {
-                    self::assertSame('local-user-id', $dto->getAttributeName());
-                    self::assertSame('local_user_id', $dto->getJwtClaimName());
-                    self::assertTrue($dto->shouldExposeInJwt());
+                self::callback(static function ($dto) use (&$ensureCalls): bool {
+                    ++$ensureCalls;
+
+                    if ($ensureCalls === 1) {
+                        self::assertSame('local-user-id', $dto->getAttributeName());
+                        self::assertSame('local_user_id', $dto->getJwtClaimName());
+                        self::assertTrue($dto->shouldExposeInJwt());
+                        self::assertTrue($dto->shouldCreateIfMissing());
+
+                        return true;
+                    }
+
+                    self::assertSame('profile-first-name', $dto->getAttributeName());
+                    self::assertSame('profile_first_name', $dto->getJwtClaimName());
+                    self::assertFalse($dto->shouldExposeInJwt());
                     self::assertTrue($dto->shouldCreateIfMissing());
 
                     return true;
                 })
-            )
-            ->willReturnCallback(static function () use (&$ensured): void {
-                $ensured = true;
-            });
+            );
         $inner
             ->expects(self::once())
             ->method('createUser')
             ->with($user, $password)
-            ->willReturnCallback(static function () use (&$ensured, $createdUser): KeycloakUser {
-                self::assertTrue($ensured);
+            ->willReturnCallback(static function () use (&$ensureCalls, $createdUser): KeycloakUser {
+                self::assertSame(2, $ensureCalls);
 
                 return $createdUser;
             });
@@ -75,7 +93,14 @@ final class ConfiguredKeycloakServiceTest extends TestCase
             realm: 'users-realm',
             className: LocalUser::class,
             userIdentifierField: 'localIdentifier',
-            exposeInJwt: true,
+            attributesMap: [
+                [
+                    'property' => 'localIdentifier',
+                    'attribute_name' => 'local-user-id',
+                    'jwt_claim_name' => 'local_user_id',
+                    'create_if_missing' => false,
+                ],
+            ],
         );
 
         $ensured = false;

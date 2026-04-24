@@ -131,17 +131,25 @@ final class TestKernel extends Kernel
                     LocalUser::class => [
                         'realm' => 'users-realm',
                         'user_identifier_field' => 'localIdentifier',
-                        'attribute_name' => 'local-user-id',
-                        'jwt_claim_name' => 'local_user_id',
-                        'expose_in_jwt' => true,
-                        'create_if_missing' => true,
+                        'attributes_map' => [
+                            [
+                                'property' => 'localIdentifier',
+                                'attribute_name' => 'local-user-id',
+                                'jwt_claim_name' => 'local_user_id',
+                                'create_if_missing' => true,
+                            ],
+                            [
+                                'property' => 'firstName',
+                                'attribute_name' => 'profile-first-name',
+                                'create_if_missing' => true,
+                            ],
+                        ],
                         'role_prefix' => 'payment.',
                         'role_suffix' => '.svc',
                     ],
                     CustomMappedUser::class => [
                         'realm' => 'custom-realm',
                         'user_identifier_field' => 'externalIdentifier',
-                        'attribute_name' => 'external-user-id',
                         'mapper' => CustomMappedUserMapper::class,
                     ],
                 ],

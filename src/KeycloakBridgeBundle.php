@@ -58,10 +58,17 @@ final class KeycloakBridgeBundle extends AbstractBundle
                         ->children()
                             ->scalarNode('realm')->isRequired()->cannotBeEmpty()->end()
                             ->scalarNode('user_identifier_field')->isRequired()->cannotBeEmpty()->end()
-                            ->scalarNode('attribute_name')->defaultNull()->end()
-                            ->scalarNode('jwt_claim_name')->defaultNull()->end()
-                            ->booleanNode('expose_in_jwt')->defaultFalse()->end()
-                            ->booleanNode('create_if_missing')->defaultFalse()->end()
+                            ->arrayNode('attributes_map')
+                                ->arrayPrototype()
+                                    ->children()
+                                        ->scalarNode('property')->isRequired()->cannotBeEmpty()->end()
+                                        ->scalarNode('attribute_name')->defaultNull()->end()
+                                        ->scalarNode('jwt_claim_name')->defaultNull()->end()
+                                        ->booleanNode('create_if_missing')->defaultFalse()->end()
+                                    ->end()
+                                ->end()
+                                ->defaultValue([])
+                            ->end()
                             ->scalarNode('role_prefix')->defaultValue('')->end()
                             ->scalarNode('role_suffix')->defaultValue('')->end()
                             ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
@@ -89,10 +96,12 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  user_entities: array<string, array{
      *      realm: string,
      *      user_identifier_field: string,
-     *      attribute_name: string|null,
-     *      jwt_claim_name: string|null,
-     *      expose_in_jwt: bool,
-     *      create_if_missing: bool,
+     *      attributes_map: list<array{
+     *          property: string,
+     *          attribute_name: string|null,
+     *          jwt_claim_name: string|null,
+     *          create_if_missing: bool
+     *      }>,
      *      role_prefix: string,
      *      role_suffix: string,
      *      mapper: string
@@ -232,10 +241,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                         $userEntityConfig['role_prefix'],
                         $userEntityConfig['role_suffix'],
                         $mapperClass,
-                        $userEntityConfig['attribute_name'],
-                        $userEntityConfig['jwt_claim_name'],
-                        $userEntityConfig['expose_in_jwt'],
-                        $userEntityConfig['create_if_missing'],
+                        $userEntityConfig['attributes_map'],
                     ]
                 )
                 ->tag(name: 'keycloak.user_entity_config');

@@ -68,7 +68,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 availableRoles: $availableRoles,
                 userConfig: $userConfig,
             ),
-            attributes: $this->buildIdentifierAttributes(
+            attributes: $this->buildMappedAttributes(
                 localUser: $localUser,
                 userConfig: $userConfig,
             ),
@@ -159,7 +159,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 : $newUserVersion->getFirstName(),
             lastName: $lastName,
             roles: $roles,
-            attributes: $this->buildIdentifierAttributes(
+            attributes: $this->buildMappedAttributes(
                 localUser: $newUserVersion,
                 userConfig: $newUserConfig,
             ),
@@ -212,13 +212,11 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
     /**
      * @return array<string, string>
      */
-    private function buildIdentifierAttributes(
+    private function buildMappedAttributes(
         KeycloakUserInterface $localUser,
         UserEntityConfig $userConfig
     ): array {
-        return [
-            $userConfig->getUserIdentifierAttributeName() => $userConfig->resolveUserIdentifierValue($localUser),
-        ];
+        return $userConfig->resolveMappedAttributes(localUser: $localUser);
     }
 
     /**
