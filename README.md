@@ -1,14 +1,44 @@
 # Symfony Keycloak Bridge Bundle
 
-This bundle wires `apacheborys/keycloak-php-client` into Symfony and exposes its services via DI.
+`apacheborys/symfony-keycloak-bundle` is a thin Symfony bridge over
+`apacheborys/keycloak-php-client`.
 
-## Install (local dev)
+The goal is simple:
+
+- keep your Symfony user entity as the source of truth
+- map it into Keycloak with very little configuration
+- verify Keycloak JWT tokens inside Symfony Security
+- still leave enough extension points for real-world projects
+
+In the happy path you configure only:
+
+- Keycloak base client credentials
+- the target realm for each user entity
+
+Everything else can be inferred:
+
+- Doctrine resolves the local identifier field automatically
+- the default mapper projects that identifier into Keycloak attributes
+- the same identifier is expected in JWT payload automatically
+- custom attribute mapping, role projection, and custom mappers stay opt-in
+
+```mermaid
+flowchart LR
+    A[Doctrine User Entity] --> B[Symfony Keycloak Bridge Bundle]
+    B --> C[LocalEntityMapper]
+    C --> D[apacheborys/keycloak-php-client]
+    D --> E[Keycloak]
+    E --> F[JWT with local identifier claim]
+    F --> G[KeycloakJwtAuthenticator]
+```
+
+## Install
 
 ```bash
 composer require apacheborys/symfony-keycloak-bundle
 ```
 
-## Enable the bundle
+Enable the bundle:
 
 ```php
 // config/bundles.php
@@ -17,7 +47,7 @@ return [
 ];
 ```
 
-## Configuration
+## Minimal Config
 
 ```yaml
 # config/packages/keycloak_bridge.yaml
@@ -26,88 +56,52 @@ keycloak_bridge:
   client_realm: '%env(KEYCLOAK_CLIENT_REALM)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
-  http_client_service: 'http_client' # PSR-18 client service id
-  request_factory_service: 'psr17.request_factory' # PSR-17 request factory id
-  stream_factory_service: 'psr17.stream_factory' # PSR-17 stream factory id
-  cache_pool: 'cache.app' # optional PSR-6 cache pool id
-  logger_service: 'logger' # optional PSR-3 logger service id
-  allow_role_creation: false # allow creating missing roles in Keycloak during sync
-  realm_list_ttl: 3600
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
-      role_prefix: 'payment.' # optional
-      role_suffix: '.svc' # optional
-      mapper: Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper # optional
 ```
 
-If you omit any of the service IDs, the bundle will rely on container aliases for the corresponding PSR interfaces.
-Make sure your app provides PSR-18 + PSR-17 implementations (and PSR-6 cache if you enable caching).
+That is enough to start:
+
+- `App\Entity\User` must be a Doctrine-managed entity
+- the bundle resolves its identifier field from Doctrine metadata
+- that identifier is automatically added to Keycloak attributes during user sync
+- the same identifier is expected in JWT payload after you bootstrap the Keycloak attribute once
+
+This minimal setup assumes your container already provides:
+
+- `Doctrine\Persistence\ManagerRegistry`
+- a PSR-18 HTTP client
+- PSR-17 request and stream factories
+
+## Start Here
+
+- [Quick Start](docs/quick-start.md)
+  Full happy-path example with minimal config, one-time bootstrap through `KeycloakBootstrapper`, and create/update/delete calls.
+- [Configuration Guide](docs/configuration.md)
+  Required fields, optional fields, `attributes_map`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
+- [Security Guide](docs/security.md)
+  `KeycloakJwtAuthenticator`, JWT identifier claim resolution, firewall setup, and role extraction.
 
 ## Services
 
-You can autowire these interfaces:
+You can autowire these interfaces directly:
 
 - `Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakOidcAuthenticationServiceInterface`
+- `Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakRealmServiceInterface`
 - `Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator`
+- `Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper`
 
-User mappers must implement `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface`
-and are tagged as `keycloak.local_user_mapper`. The bundled `LocalEntityMapper` is wired when
-`user_entities` is configured.
+## Design Notes
 
-Per-entity mapper selection is supported via `user_entities.<Entity>.mapper`:
-- defaults to `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper`
-- can point to your custom mapper service class for specific entities
-
-`LocalEntityMapper` supports:
-- `getRealm`
-- `prepareLocalUserForKeycloakUserCreation`
-- `prepareLocalUserForKeycloakLoginUser`
-- `prepareLocalUserForKeycloakUserDeletion`
-- `prepareLocalUserDiffForKeycloakUserUpdate`
-
-`prepareLocalUserForKeycloakLoginUser` builds `OidcTokenRequestDto` using:
-- entity realm from `user_entities`
-- `client_id` and `client_secret` from bundle config
-- local user username + provided plain password
-
-Role synchronization mapping is also built in:
-- local Symfony role names are projected to `RoleDto`
-- optional `role_prefix` and `role_suffix` are applied before projecting roles to Keycloak
-- existing Keycloak roles are reused by name
-- unknown roles become lightweight `RoleDto` objects and can be auto-created when
-  `allow_role_creation: true`
-
-If your login flow needs custom fields/scope/grant behavior, point `user_entities.<Entity>.mapper`
-to your mapper class. The bundle will tag it as `keycloak.local_user_mapper` automatically.
-If your mapper needs custom constructor arguments, define it as a Symfony service explicitly.
-
-## Security Authenticator
-
-The bundle provides `Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator`.
-It:
-
-- reads bearer JWT from `Authorization` header
-- checks token `iss` matches configured Keycloak `base_url`
-- verifies signature and temporal claims via `KeycloakJwtVerificationServiceInterface`
-- converts Keycloak realm/resource roles into Symfony user roles
-
-Example firewall setup:
-
-```yaml
-# config/packages/security.yaml
-security:
-  firewalls:
-    api:
-      stateless: true
-      custom_authenticators:
-        - Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator
-```
+- The bundle does not mutate Keycloak realm configuration automatically during `createUser()`, `updateUser()`, or `loginUser()`.
+- Keycloak profile attribute bootstrap is an explicit application concern via `KeycloakBootstrapper`.
+- The default mapper is intentionally conservative; if your app needs different login or projection rules, switch the entity to a custom mapper.
 
 ## Development
 

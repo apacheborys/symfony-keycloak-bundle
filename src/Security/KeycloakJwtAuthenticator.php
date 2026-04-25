@@ -7,6 +7,7 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Security;
 use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Override;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -25,10 +26,25 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
     private const string REQUEST_ATTRIBUTE_RAW_JWT = '_keycloak_bridge.jwt.raw';
     private const string REQUEST_ATTRIBUTE_PARSED_JWT = '_keycloak_bridge.jwt.parsed';
 
+    /** @var list<string> */
+    private readonly array $configuredIdentifierClaimNames;
+
+    /**
+     * @param iterable<UserEntityConfig> $userEntityConfigs
+     */
     public function __construct(
         private readonly KeycloakJwtVerificationServiceInterface $jwtVerificationService,
         private readonly KeycloakClientConfig $keycloakClientConfig,
+        iterable $userEntityConfigs,
     ) {
+        $configuredIdentifierClaimNames = [];
+        foreach ($userEntityConfigs as $userEntityConfig) {
+            foreach ($userEntityConfig->getUserIdentifierJwtClaimNames() as $claimName) {
+                $configuredIdentifierClaimNames[$claimName] = true;
+            }
+        }
+
+        $this->configuredIdentifierClaimNames = array_keys($configuredIdentifierClaimNames);
     }
 
     #[Override]
@@ -84,8 +100,13 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
             throw new CustomUserMessageAuthenticationException(message: 'JWT signature validation failed.');
         }
 
-        /** @var non-empty-string $userIdentifier */
         $userIdentifier = $this->resolveUserIdentifier(jwt: $jwt);
+        if ($userIdentifier === null) {
+            throw new CustomUserMessageAuthenticationException(
+                message: 'Configured JWT user identifier attribute is missing.'
+            );
+        }
+
         $roles = $this->extractRoles(jwt: $jwt);
 
         return new SelfValidatingPassport(
@@ -130,16 +151,31 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
     }
 
     /**
-     * @return non-empty-string
+     * @return ?non-empty-string
      */
-    private function resolveUserIdentifier(JsonWebToken $jwt): string
+    private function resolveUserIdentifier(JsonWebToken $jwt): ?string
     {
-        $preferredUsername = trim($jwt->getPayload()->getPreferredUsername());
-        if ($preferredUsername !== '') {
-            return $preferredUsername;
+        foreach ($this->configuredIdentifierClaimNames as $claimName) {
+            if (!$jwt->getPayload()->hasClaim($claimName)) {
+                continue;
+            }
+
+            $claimValue = $jwt->getPayload()->getClaim($claimName);
+            if (is_string($claimValue)) {
+                $normalizedClaimValue = trim($claimValue);
+                if ($normalizedClaimValue !== '') {
+                    return $normalizedClaimValue;
+                }
+
+                continue;
+            }
+
+            if (is_int($claimValue) || is_float($claimValue)) {
+                return (string) $claimValue;
+            }
         }
 
-        return $jwt->getPayload()->getSub()->toString();
+        return null;
     }
 
     /**

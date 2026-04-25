@@ -7,14 +7,18 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Doctrine\TestManagerRegistry;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
-use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
+use Doctrine\Persistence\ManagerRegistry;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -49,10 +53,13 @@ final class TestKernel extends Kernel
                     $serviceId = KeycloakService::class;
                     $aliasId = KeycloakServiceInterface::class;
                     $jwtAliasId = KeycloakJwtVerificationServiceInterface::class;
+                    $identifierAliasId = KeycloakUserIdentifierAttributeServiceInterface::class;
                     $mapperId = LocalEntityMapper::class;
                     $customMapperId = CustomMappedUserMapper::class;
                     $authenticatorId = KeycloakJwtAuthenticator::class;
                     $authenticatorAliasId = 'keycloak.jwt_authenticator';
+                    $bootstrapperId = KeycloakBootstrapper::class;
+                    $bootstrapperAliasId = 'keycloak.bootstrapper';
 
                     if ($container->hasDefinition($serviceId)) {
                         $container->getDefinition($serviceId)->setPublic(true);
@@ -64,6 +71,10 @@ final class TestKernel extends Kernel
 
                     if ($container->hasAlias($jwtAliasId)) {
                         $container->getAlias($jwtAliasId)->setPublic(true);
+                    }
+
+                    if ($container->hasAlias($identifierAliasId)) {
+                        $container->getAlias($identifierAliasId)->setPublic(true);
                     }
 
                     if ($container->hasDefinition($mapperId)) {
@@ -80,6 +91,14 @@ final class TestKernel extends Kernel
 
                     if ($container->hasAlias($authenticatorAliasId)) {
                         $container->getAlias($authenticatorAliasId)->setPublic(true);
+                    }
+
+                    if ($container->hasDefinition($bootstrapperId)) {
+                        $container->getDefinition($bootstrapperId)->setPublic(true);
+                    }
+
+                    if ($container->hasAlias($bootstrapperAliasId)) {
+                        $container->getAlias($bootstrapperAliasId)->setPublic(true);
                     }
                 }
             }
@@ -104,6 +123,15 @@ final class TestKernel extends Kernel
         $services
             ->set('psr17.factory', Psr17Factory::class);
 
+        $services
+            ->set('doctrine', TestManagerRegistry::class)
+            ->args(arguments: [[
+                LocalUser::class => 'id',
+                CustomMappedUser::class => 'id',
+            ]]);
+
+        $services->alias(ManagerRegistry::class, 'doctrine');
+
         $container->extension(
             namespace: 'keycloak_bridge',
             config: [
@@ -118,6 +146,18 @@ final class TestKernel extends Kernel
                 'user_entities' => [
                     LocalUser::class => [
                         'realm' => 'users-realm',
+                        'attributes_map' => [
+                            [
+                                'property' => 'id',
+                                'attribute_name' => 'local-user-id',
+                                'create_if_missing' => true,
+                            ],
+                            [
+                                'property' => 'firstName',
+                                'attribute_name' => 'profile-first-name',
+                                'create_if_missing' => true,
+                            ],
+                        ],
                         'role_prefix' => 'payment.',
                         'role_suffix' => '.svc',
                     ],

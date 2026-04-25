@@ -6,8 +6,10 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Security;
 
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
@@ -41,9 +43,10 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
         $jwt = self::buildJwt(
             issuer: 'https://example.test/realms/users-realm',
-            preferredUsername: 'alice',
+            preferredUsername: 'alice@example.test',
             realmRoles: ['payment.ROLE_USER.svc'],
             accountRoles: ['manage-account'],
+            additionalPayloadClaims: ['external_user_id' => 'some-external-user-id'],
         );
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
@@ -57,14 +60,56 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $user = $badge->getUser();
 
         self::assertInstanceOf(KeycloakJwtUser::class, $user);
-        self::assertSame('alice', $user->getUserIdentifier());
+        self::assertSame('some-external-user-id', $user->getUserIdentifier());
         self::assertSame(['payment.ROLE_USER.svc', 'manage-account'], $user->getRoles());
+    }
+
+    public function testAuthenticateBuildsSymfonyUserFromConfiguredJwtClaimName(): void
+    {
+        $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
+        $jwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            preferredUsername: 'alice@example.test',
+            additionalPayloadClaims: ['external_user_id_test' => 'alias-user-id'],
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        $passport = $authenticator->authenticate($request);
+
+        self::assertInstanceOf(SelfValidatingPassport::class, $passport);
+        /** @var UserBadge $badge */
+        $badge = $passport->getBadge(UserBadge::class);
+        $user = $badge->getUser();
+
+        self::assertInstanceOf(KeycloakJwtUser::class, $user);
+        self::assertSame('alias-user-id', $user->getUserIdentifier());
+    }
+
+    public function testAuthenticateThrowsWhenConfiguredIdentifierClaimIsMissing(): void
+    {
+        $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
+        $jwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            preferredUsername: 'alice@example.test',
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        $this->expectException(CustomUserMessageAuthenticationException::class);
+        $this->expectExceptionMessage('Configured JWT user identifier attribute is missing.');
+        $authenticator->authenticate($request);
     }
 
     public function testAuthenticateThrowsWhenJwtVerificationFails(): void
     {
         $authenticator = $this->createAuthenticator(verificationResult: false, baseUrl: 'https://example.test');
-        $jwt = self::buildJwt(issuer: 'https://example.test/realms/users-realm');
+        $jwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'some-external-user-id'],
+        );
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
         self::assertTrue($authenticator->supports($request));
@@ -95,18 +140,35 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
                 clientSecret: 'bridge-secret',
                 realmListTtl: 30,
             ),
+            userEntityConfigs: [
+                new UserEntityConfig(
+                    realm: 'users-realm',
+                    className: LocalUser::class,
+                    userIdentifierField: 'id',
+                    attributesMap: [
+                        [
+                            'property' => 'id',
+                            'attribute_name' => 'external_user_id',
+                            'jwt_claim_name' => 'external_user_id_test',
+                            'create_if_missing' => true,
+                        ],
+                    ],
+                ),
+            ],
         );
     }
 
     /**
      * @param list<string> $realmRoles
      * @param list<string> $accountRoles
+     * @param array<string, mixed> $additionalPayloadClaims
      */
     private static function buildJwt(
         string $issuer,
         string $preferredUsername = 'local-user',
         array $realmRoles = ['ROLE_USER'],
         array $accountRoles = ['view-profile'],
+        array $additionalPayloadClaims = [],
     ): string {
         $header = [
             'alg' => 'RS256',
@@ -140,6 +202,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
             'clientAddress' => '127.0.0.1',
             'client_id' => 'bridge-client',
         ];
+        $payload = [...$payload, ...$additionalPayloadClaims];
 
         return self::encodeSegment(data: $header)
             . '.'

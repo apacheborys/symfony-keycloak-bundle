@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Integration;
 
 use Apacheborys\KeycloakPhpClient\DTO\RoleDto;
-use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Http\KeycloakHttpClientInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakService;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
+use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
@@ -69,12 +72,16 @@ final class ContainerBootTest extends KernelTestCase
         $service = $container->get(KeycloakServiceInterface::class);
 
         self::assertInstanceOf(KeycloakService::class, $service);
+        self::assertSame($container->get(KeycloakService::class), $service);
 
         self::assertTrue($container->has(KeycloakServiceInterface::class));
         self::assertTrue($container->has(KeycloakHttpClientInterface::class));
         self::assertTrue($container->has(KeycloakJwtVerificationServiceInterface::class));
+        self::assertTrue($container->has(KeycloakUserIdentifierAttributeServiceInterface::class));
         self::assertTrue($container->has(KeycloakJwtAuthenticator::class));
+        self::assertTrue($container->has(KeycloakBootstrapper::class));
         self::assertInstanceOf(KeycloakJwtAuthenticator::class, $container->get(KeycloakJwtAuthenticator::class));
+        self::assertInstanceOf(KeycloakBootstrapper::class, $container->get(KeycloakBootstrapper::class));
     }
 
     public function testUserEntityRealmMapping(): void
@@ -107,6 +114,13 @@ final class ContainerBootTest extends KernelTestCase
         self::assertCount(2, $dto->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
+        self::assertSame(
+            [
+                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['Local'],
+            ],
+            $dto->getAttributes()
+        );
     }
 
     public function testCustomMapperConfigurationOverridesDefaultMapperSupport(): void
@@ -129,6 +143,44 @@ final class ContainerBootTest extends KernelTestCase
         self::assertFalse($localEntityMapper->support($customUser));
         self::assertTrue($customMapper->support($customUser));
         self::assertTrue($localEntityMapper->support($defaultUser));
+    }
+
+    public function testUserEntityConfigResolvesConfiguredIdentifierField(): void
+    {
+        $userEntityConfig = new UserEntityConfig(
+            realm: 'users-realm',
+            className: LocalUser::class,
+            userIdentifierField: 'id',
+            attributesMap: [
+                [
+                    'property' => 'id',
+                    'attribute_name' => 'local-user-id',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => true,
+                ],
+                [
+                    'property' => 'firstName',
+                    'attribute_name' => 'profile-first-name',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => true,
+                ],
+            ],
+        );
+
+        self::assertSame('id', $userEntityConfig->getUserIdentifierField());
+        self::assertCount(2, $userEntityConfig->getAttributeConfigs());
+        self::assertSame(['local-user-id', 'local_user_id'], $userEntityConfig->getUserIdentifierJwtClaimNames());
+        self::assertSame(
+            'local-user-id',
+            $userEntityConfig->buildEnsureUserIdentifierAttributeDto()->getAttributeName()
+        );
+        self::assertSame(
+            [
+                'local-user-id' => '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
+                'profile-first-name' => 'Local',
+            ],
+            $userEntityConfig->resolveMappedAttributes(new LocalUser())
+        );
     }
 
     public function testUserEntityDeletionMapping(): void
@@ -187,6 +239,7 @@ final class ContainerBootTest extends KernelTestCase
         $newUser = new LocalUser(
             email: 'after@example.test',
             firstName: 'After',
+            localIdentifier: 'updated-local-user-reference',
             roles: ['ROLE_USER', 'ROLE_ADMIN'],
         );
 
@@ -212,5 +265,12 @@ final class ContainerBootTest extends KernelTestCase
         self::assertCount(2, $dto->getProfile()->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getProfile()->getRoles()[0]->getName());
         self::assertSame('payment.ROLE_ADMIN.svc', $dto->getProfile()->getRoles()[1]->getName());
+        self::assertSame(
+            [
+                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['After'],
+            ],
+            $dto->getProfile()->getAttributes()
+        );
     }
 }

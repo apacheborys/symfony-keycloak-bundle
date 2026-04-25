@@ -19,6 +19,7 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
         private string $firstName = 'Custom',
         private string $lastName = 'User',
         private bool $enabled = true,
+        private string $externalIdentifier = 'external-custom-user-reference-f8c44ba7-4f23-4974-abf1-9f4685c8f5ad',
         /** @var string[] */
         private array $roles = ['ROLE_CUSTOM'],
     ) {
@@ -64,6 +65,11 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
     public function getRoles(): array
     {
         return $this->roles;
+    }
+
+    public function getExternalIdentifier(): string
+    {
+        return $this->externalIdentifier;
     }
 
     #[Override]
