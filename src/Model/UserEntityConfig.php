@@ -118,6 +118,22 @@ final readonly class UserEntityConfig
         return $this->getUserIdentifierAttributeConfig()->buildEnsureAttributeDto();
     }
 
+    public function buildBootstrapUserIdentifierAttributeDto(): EnsureUserIdentifierAttributeDto
+    {
+        $dto = $this->buildEnsureUserIdentifierAttributeDto();
+        $shouldExposeInJwt = $dto->shouldExposeInJwt();
+
+        return new EnsureUserIdentifierAttributeDto(
+            attributeName: $dto->getAttributeName(),
+            displayName: $dto->getDisplayName(),
+            createIfMissing: true,
+            exposeInJwt: $shouldExposeInJwt,
+            clientScopeName: $dto->getClientScopeName(),
+            jwtClaimName: $shouldExposeInJwt ? $dto->getJwtClaimName() : null,
+            protocolMapperName: $shouldExposeInJwt ? $dto->getProtocolMapperName() : null,
+        );
+    }
+
     /**
      * @return array<string, string>
      */

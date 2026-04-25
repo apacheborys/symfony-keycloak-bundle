@@ -66,6 +66,16 @@ Per-entity options:
 | `role_suffix` | no | `''` | Suffix applied after local role names are projected |
 | `mapper` | no | `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper` | Mapper service class for this entity |
 
+The bridge-level bootstrap service:
+
+- `Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper`
+
+uses the resolved entity configuration internally, so the application can simply call:
+
+```php
+$this->keycloakBootstrapper->ensureUserIdentifierAttribute(App\Entity\User::class);
+```
+
 ## `attributes_map`
 
 Use `attributes_map` when you want to project more than just the Doctrine identifier field.

@@ -77,7 +77,7 @@ This minimal setup assumes your container already provides:
 ## Start Here
 
 - [Quick Start](docs/quick-start.md)
-  Full happy-path example with minimal config, one-time `ensureUserIdentifierAttribute()` bootstrap, and create/update/delete calls.
+  Full happy-path example with minimal config, one-time bootstrap through `KeycloakBootstrapper`, and create/update/delete calls.
 - [Configuration Guide](docs/configuration.md)
   Required fields, optional fields, `attributes_map`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
 - [Security Guide](docs/security.md)
@@ -95,11 +95,12 @@ You can autowire these interfaces directly:
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface`
 - `Apacheborys\KeycloakPhpClient\Service\KeycloakRealmServiceInterface`
 - `Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator`
+- `Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper`
 
 ## Design Notes
 
 - The bundle does not mutate Keycloak realm configuration automatically during `createUser()`, `updateUser()`, or `loginUser()`.
-- Keycloak profile attribute bootstrap is an explicit application concern via `ensureUserIdentifierAttribute()`.
+- Keycloak profile attribute bootstrap is an explicit application concern via `KeycloakBootstrapper`.
 - The default mapper is intentionally conservative; if your app needs different login or projection rules, switch the entity to a custom mapper.
 
 ## Development

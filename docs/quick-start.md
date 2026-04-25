@@ -60,7 +60,7 @@ flowchart TD
 
 ## 2. Bootstrap the Identifier Attribute in Keycloak
 
-The bridge does not call `ensureUserIdentifierAttribute()` automatically.
+The bridge does not call Keycloak bootstrap operations automatically.
 This is deliberate: Keycloak schema and protocol-mapper changes should be explicit.
 
 The usual pattern is to run this once during deployment, migration, or bootstrap.
@@ -72,37 +72,28 @@ declare(strict_types=1);
 
 namespace App\Keycloak;
 
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
 use App\Entity\User;
-use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
-use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 
-final readonly class KeycloakBootstrapper
+final readonly class KeycloakSetup
 {
     public function __construct(
-        private KeycloakUserIdentifierAttributeServiceInterface $keycloak,
+        private KeycloakBootstrapper $keycloakBootstrapper,
     ) {
     }
 
-    public function ensureUserIdentifierAttribute(User $referenceUser): void
+    public function bootstrap(): void
     {
-        $this->keycloak->ensureUserIdentifierAttribute(
-            localUser: $referenceUser,
-            dto: new EnsureUserIdentifierAttributeDto(
-                attributeName: 'id',
-                displayName: 'Local user id',
-                createIfMissing: true,
-                exposeInJwt: true,
-            ),
-        );
+        $this->keycloakBootstrapper->ensureUserIdentifierAttribute(User::class);
     }
 }
 ```
 
 Notes:
 
-- use any instance of the mapped entity so the bridge can resolve the correct realm
-- if your Doctrine identifier field is not `id`, replace `attributeName: 'id'` with the real field name
-- if you want a different JWT claim name, add `jwtClaimName: '...'`
+- the bridge resolves realm, attribute name, display name, and JWT claim from bundle configuration
+- if your Doctrine identifier field is not `id`, the bridge still resolves it automatically
+- if you customized identifier mapping through `attributes_map`, the bootstrapper uses that configuration too
 
 ## 3. Create, Update, and Delete Users
 
@@ -161,12 +152,12 @@ sequenceDiagram
     autonumber
     participant App as Symfony App
     participant Bridge as Bridge Mapper
+    participant Bootstrap as KeycloakBootstrapper
     participant Client as keycloak-php-client
     participant KC as Keycloak
 
-    App->>Client: ensureUserIdentifierAttribute()
-    Client->>Bridge: resolve realm from mapped entity
-    Bridge->>KC: create/update user-profile attribute + JWT mapper
+    App->>Bootstrap: ensureUserIdentifierAttribute(User::class)
+    Bootstrap->>KC: create/update user-profile attribute + JWT mapper
 
     App->>Client: createUser(user, password)
     Client->>Bridge: map entity -> CreateUserProfileDto

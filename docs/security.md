@@ -49,6 +49,10 @@ Typical result:
 - JWT payload contains the same value as a claim
 - the authenticator turns that value into `KeycloakJwtUser::getUserIdentifier()`
 
+The recommended way to prepare that claim in Keycloak is:
+
+- `Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper::ensureUserIdentifierAttribute()`
+
 ## Role Extraction
 
 The authenticator merges roles from:

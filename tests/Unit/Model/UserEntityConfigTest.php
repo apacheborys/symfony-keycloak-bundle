@@ -74,6 +74,22 @@ final class UserEntityConfigTest extends TestCase
         self::assertSame(['id'], $config->getUserIdentifierJwtClaimNames());
     }
 
+    public function testBuildBootstrapUserIdentifierAttributeDtoForcesCreateIfMissing(): void
+    {
+        $config = new UserEntityConfig(
+            realm: 'users-realm',
+            className: LocalUser::class,
+            userIdentifierField: 'id',
+        );
+
+        $dto = $config->buildBootstrapUserIdentifierAttributeDto();
+
+        self::assertTrue($dto->shouldCreateIfMissing());
+        self::assertTrue($dto->shouldExposeInJwt());
+        self::assertSame('id', $dto->getAttributeName());
+        self::assertSame('id', $dto->getJwtClaimName());
+    }
+
     public function testRejectsDuplicatedAttributeProperty(): void
     {
         $this->expectException(InvalidArgumentException::class);

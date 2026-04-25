@@ -18,11 +18,13 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Factory\UserEntityConfigFactory;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\KeycloakBootstrapTargetMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\DoctrineUserEntityIdentifierFieldResolver;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\UserEntityIdentifierFieldResolverInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
 use Doctrine\Persistence\ManagerRegistry;
 use Override;
 use Psr\Http\Client\ClientInterface;
@@ -202,6 +204,17 @@ final class KeycloakBridgeBundle extends AbstractBundle
 
         $services->alias(id: 'keycloak.jwt_authenticator', referencedId: KeycloakJwtAuthenticator::class);
 
+        $services
+            ->set(id: KeycloakBootstrapper::class)
+            ->args(
+                arguments: [
+                    service(serviceId: KeycloakUserIdentifierAttributeServiceInterface::class),
+                    tagged_iterator(tag: 'keycloak.user_entity_config'),
+                ]
+            );
+
+        $services->alias(id: 'keycloak.bootstrapper', referencedId: KeycloakBootstrapper::class);
+
         if ($config['user_entities'] === []) {
             return;
         }
@@ -218,6 +231,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
         $services
             ->set(id: UserEntityConfigFactory::class)
             ->args(arguments: [service(serviceId: UserEntityIdentifierFieldResolverInterface::class)]);
+
+        $services
+            ->set(id: KeycloakBootstrapTargetMapper::class)
+            ->tag(name: 'keycloak.local_user_mapper');
 
         $configuredMapperClasses = [];
         foreach ($config['user_entities'] as $className => $userEntityConfig) {
