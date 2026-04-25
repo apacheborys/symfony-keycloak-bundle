@@ -16,12 +16,12 @@ final class UserEntityConfigTest extends TestCase
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'localIdentifier',
+            userIdentifierField: 'id',
             attributesMap: [
                 [
-                    'property' => 'localIdentifier',
+                    'property' => 'id',
                     'attribute_name' => 'local-user-id',
-                    'jwt_claim_name' => 'local_user_id',
+                    'jwt_claim_name' => null,
                     'create_if_missing' => true,
                 ],
                 [
@@ -33,13 +33,13 @@ final class UserEntityConfigTest extends TestCase
             ],
         );
 
-        self::assertSame('localIdentifier', $config->getUserIdentifierField());
+        self::assertSame('id', $config->getUserIdentifierField());
         self::assertCount(2, $config->getAttributeConfigs());
         self::assertSame(['local-user-id', 'local_user_id'], $config->getUserIdentifierJwtClaimNames());
         self::assertSame('local-user-id', $config->buildEnsureUserIdentifierAttributeDto()->getAttributeName());
         self::assertSame(
             [
-                'local-user-id' => 'local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326',
+                'local-user-id' => '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
                 'profile-first-name' => 'Local',
             ],
             $config->resolveMappedAttributes(new LocalUser()),
@@ -65,33 +65,33 @@ final class UserEntityConfigTest extends TestCase
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'localIdentifier',
+            userIdentifierField: 'id',
         );
 
         self::assertCount(1, $config->getAttributeConfigs());
-        self::assertSame('localIdentifier', $config->getUserIdentifierAttributeConfig()->getAttributeName());
-        self::assertNull($config->getUserIdentifierAttributeConfig()->getJwtClaimName());
-        self::assertSame(['localIdentifier'], $config->getUserIdentifierJwtClaimNames());
+        self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getAttributeName());
+        self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getJwtClaimName());
+        self::assertSame(['id'], $config->getUserIdentifierJwtClaimNames());
     }
 
     public function testRejectsDuplicatedAttributeProperty(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Configured attribute property "localIdentifier" is duplicated');
+        $this->expectExceptionMessage('Configured attribute property "id" is duplicated');
 
         new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'localIdentifier',
+            userIdentifierField: 'id',
             attributesMap: [
                 [
-                    'property' => 'localIdentifier',
+                    'property' => 'id',
                     'attribute_name' => 'local-user-id',
                     'jwt_claim_name' => null,
                     'create_if_missing' => false,
                 ],
                 [
-                    'property' => 'localIdentifier',
+                    'property' => 'id',
                     'attribute_name' => 'local-user-id-2',
                     'jwt_claim_name' => null,
                     'create_if_missing' => false,

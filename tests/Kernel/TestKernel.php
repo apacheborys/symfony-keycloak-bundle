@@ -11,11 +11,13 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Doctrine\TestManagerRegistry;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
-use Nyholm\Psr7\Factory\Psr17Factory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
+use Doctrine\Persistence\ManagerRegistry;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -110,6 +112,15 @@ final class TestKernel extends Kernel
         $services
             ->set('psr17.factory', Psr17Factory::class);
 
+        $services
+            ->set('doctrine', TestManagerRegistry::class)
+            ->args(arguments: [[
+                LocalUser::class => 'id',
+                CustomMappedUser::class => 'id',
+            ]]);
+
+        $services->alias(ManagerRegistry::class, 'doctrine');
+
         $container->extension(
             namespace: 'keycloak_bridge',
             config: [
@@ -124,12 +135,10 @@ final class TestKernel extends Kernel
                 'user_entities' => [
                     LocalUser::class => [
                         'realm' => 'users-realm',
-                        'user_identifier_field' => 'localIdentifier',
                         'attributes_map' => [
                             [
-                                'property' => 'localIdentifier',
+                                'property' => 'id',
                                 'attribute_name' => 'local-user-id',
-                                'jwt_claim_name' => 'local_user_id',
                                 'create_if_missing' => true,
                             ],
                             [
@@ -143,7 +152,6 @@ final class TestKernel extends Kernel
                     ],
                     CustomMappedUser::class => [
                         'realm' => 'custom-realm',
-                        'user_identifier_field' => 'externalIdentifier',
                         'mapper' => CustomMappedUserMapper::class,
                     ],
                 ],

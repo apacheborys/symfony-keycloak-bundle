@@ -36,11 +36,9 @@ keycloak_bridge:
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
-      user_identifier_field: 'localIdentifier'
       attributes_map:
-        - property: 'localIdentifier'
+        - property: 'id'
           attribute_name: 'local-user-id'
-          jwt_claim_name: 'local_user_id' # optional, implies JWT exposure
           create_if_missing: true # optional
         - property: 'firstName'
           attribute_name: 'profile-first-name'
@@ -74,17 +72,19 @@ Per-entity mapper selection is supported via `user_entities.<Entity>.mapper`:
 - defaults to `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper`
 - can point to your custom mapper service class for specific entities
 
-Each `user_entities.<Entity>` entry must also declare `user_identifier_field`:
-- it must point to a real property on the configured local user entity
-- it is intended to be the canonical local-to-Keycloak reference field
-- the bundle validates the property eagerly during container build
-- the field is automatically represented inside `attributes_map`, even if you do not declare it explicitly
+Each `user_entities.<Entity>` entry is expected to be a Doctrine-managed entity:
+- the bundle resolves the canonical local user identifier from Doctrine metadata automatically
+- only single scalar Doctrine identifiers are supported right now
+- composite identifiers and association identifiers are rejected during container build
+- the resolved identifier field is automatically represented inside `attributes_map`, even if you do not declare it explicitly
+- the resolved identifier is exposed in JWT payload by default
 
 `attributes_map` lets you project any local entity property into Keycloak user attributes:
 - `property` is the local entity property name
 - `attribute_name` changes the Keycloak attribute name and defaults to `property`
 - `create_if_missing` is declarative metadata for explicit synchronization flows; the bundle does not auto-apply Keycloak schema changes during runtime requests
 - `jwt_claim_name` configures JWT exposure for that attribute and defines the claim name used in payloads
+- if the mapping targets the resolved Doctrine identifier field and `jwt_claim_name` is omitted, the bundle infers it automatically
 - the same property cannot be declared twice inside one entity config
 - the same Keycloak attribute name cannot be declared twice inside one entity config
 
@@ -118,7 +118,8 @@ The bundle does not implicitly call `ensureUserIdentifierAttribute()` during `cr
 or `loginUser`. Keeping Keycloak user-profile attributes and protocol mappers in a consistent state is
 an application/deployment responsibility. If you want explicit synchronization, call
 `Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface` yourself at the
-appropriate lifecycle stage.
+appropriate lifecycle stage. The bridge only guarantees that the identifier mapping is known locally and
+that JWT authentication expects that identifier claim.
 
 ## Security Authenticator
 
@@ -128,7 +129,7 @@ It:
 - reads bearer JWT from `Authorization` header
 - checks token `iss` matches configured Keycloak `base_url`
 - verifies signature and temporal claims via `KeycloakJwtVerificationServiceInterface`
-- resolves Symfony user identifier from the JWT claim configured for the `attributes_map` entry that matches `user_identifier_field`
+- resolves Symfony user identifier from the JWT claim configured for the `attributes_map` entry that matches the resolved Doctrine identifier field
 - converts Keycloak realm/resource roles into Symfony user roles
 
 Example firewall setup:

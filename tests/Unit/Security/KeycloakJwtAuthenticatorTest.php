@@ -144,10 +144,10 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'localIdentifier',
+                    userIdentifierField: 'id',
                     attributesMap: [
                         [
-                            'property' => 'localIdentifier',
+                            'property' => 'id',
                             'attribute_name' => 'external_user_id',
                             'jwt_claim_name' => 'external_user_id_test',
                             'create_if_missing' => true,

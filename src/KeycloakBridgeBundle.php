@@ -17,9 +17,13 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakServiceInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Factory\UserEntityConfigFactory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\DoctrineUserEntityIdentifierFieldResolver;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\UserEntityIdentifierFieldResolverInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Doctrine\Persistence\ManagerRegistry;
 use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -56,7 +60,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     ->arrayPrototype()
                         ->children()
                             ->scalarNode('realm')->isRequired()->cannotBeEmpty()->end()
-                            ->scalarNode('user_identifier_field')->isRequired()->cannotBeEmpty()->end()
                             ->arrayNode('attributes_map')
                                 ->arrayPrototype()
                                     ->children()
@@ -94,7 +97,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  realm_list_ttl: int,
      *  user_entities: array<string, array{
      *      realm: string,
-     *      user_identifier_field: string,
      *      attributes_map: list<array{
      *          property: string,
      *          attribute_name: string|null,
@@ -204,6 +206,19 @@ final class KeycloakBridgeBundle extends AbstractBundle
             return;
         }
 
+        $services
+            ->set(id: DoctrineUserEntityIdentifierFieldResolver::class)
+            ->args(arguments: [service(serviceId: ManagerRegistry::class)]);
+
+        $services->alias(
+            id: UserEntityIdentifierFieldResolverInterface::class,
+            referencedId: DoctrineUserEntityIdentifierFieldResolver::class,
+        );
+
+        $services
+            ->set(id: UserEntityConfigFactory::class)
+            ->args(arguments: [service(serviceId: UserEntityIdentifierFieldResolverInterface::class)]);
+
         $configuredMapperClasses = [];
         foreach ($config['user_entities'] as $className => $userEntityConfig) {
             $normalizedClassName = str_replace('\\\\', '\\', $className);
@@ -214,11 +229,11 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     id: 'keycloak_bridge.user_entity_config.' . str_replace('\\', '_', $normalizedClassName),
                     class: UserEntityConfig::class
                 )
+                ->factory(factory: [service(serviceId: UserEntityConfigFactory::class), 'create'])
                 ->args(
                     arguments: [
                         $userEntityConfig['realm'],
                         $normalizedClassName,
-                        $userEntityConfig['user_identifier_field'],
                         $userEntityConfig['role_prefix'],
                         $userEntityConfig['role_suffix'],
                         $mapperClass,

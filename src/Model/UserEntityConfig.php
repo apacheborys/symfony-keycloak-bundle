@@ -142,26 +142,7 @@ final readonly class UserEntityConfig
      */
     private function buildAttributeConfigs(array $attributesMap): array
     {
-        $normalizedAttributesMap = $attributesMap;
-        $hasIdentifierAttribute = false;
-        foreach ($normalizedAttributesMap as $attributeConfig) {
-            if ($attributeConfig['property'] === $this->userIdentifierField) {
-                $hasIdentifierAttribute = true;
-                break;
-            }
-        }
-
-        if (!$hasIdentifierAttribute) {
-            array_unshift(
-                $normalizedAttributesMap,
-                [
-                    'property' => $this->userIdentifierField,
-                    'attribute_name' => null,
-                    'jwt_claim_name' => null,
-                    'create_if_missing' => false,
-                ],
-            );
-        }
+        $normalizedAttributesMap = $this->normalizeAttributeMap(attributesMap: $attributesMap);
 
         $attributeConfigs = [];
         $seenProperties = [];
@@ -205,6 +186,47 @@ final readonly class UserEntityConfig
         return $attributeConfigs;
     }
 
+    /**
+     * @param list<array{
+     *  property: string,
+     *  attribute_name: string|null,
+     *  jwt_claim_name: string|null,
+     *  create_if_missing: bool
+     * }> $attributesMap
+     * @return list<array{
+     *  property: string,
+     *  attribute_name: string|null,
+     *  jwt_claim_name: string|null,
+     *  create_if_missing: bool
+     * }>
+     */
+    private function normalizeAttributeMap(array $attributesMap): array
+    {
+        foreach ($attributesMap as $index => $attributeConfig) {
+            if ($attributeConfig['property'] !== $this->userIdentifierField) {
+                continue;
+            }
+
+            $attributesMap[$index]['jwt_claim_name'] ??= $this->buildDefaultJwtClaimName(
+                attributeName: $attributeConfig['attribute_name'] ?? $attributeConfig['property']
+            );
+
+            return $attributesMap;
+        }
+
+        array_unshift(
+            $attributesMap,
+            [
+                'property' => $this->userIdentifierField,
+                'attribute_name' => null,
+                'jwt_claim_name' => $this->buildDefaultJwtClaimName(attributeName: $this->userIdentifierField),
+                'create_if_missing' => false,
+            ],
+        );
+
+        return $attributesMap;
+    }
+
     private function assertUserIdentifierFieldIsValid(): void
     {
         try {
@@ -221,5 +243,10 @@ final readonly class UserEntityConfig
 
             throw new InvalidArgumentException($message, previous: $exception);
         }
+    }
+
+    private function buildDefaultJwtClaimName(string $attributeName): string
+    {
+        return str_replace('-', '_', $attributeName);
     }
 }
