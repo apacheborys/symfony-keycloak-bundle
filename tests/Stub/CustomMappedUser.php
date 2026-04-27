@@ -13,6 +13,7 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
 {
     public function __construct(
         private string $id = 'f8c44ba7-4f23-4974-abf1-9f4685c8f5ad',
+        private string $keycloakId = 'f97d59cc-eb9d-4370-91b1-8f7bfbb86c20',
         private string $username = 'custom-user',
         private string $email = 'custom@example.test',
         private bool $emailVerified = true,
@@ -26,9 +27,9 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
     }
 
     #[Override]
-    public function getId(): string
+    public function getKeycloakId(): string
     {
-        return $this->id;
+        return $this->keycloakId;
     }
 
     #[Override]
@@ -70,6 +71,11 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
     public function getExternalIdentifier(): string
     {
         return $this->externalIdentifier;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
     }
 
     #[Override]

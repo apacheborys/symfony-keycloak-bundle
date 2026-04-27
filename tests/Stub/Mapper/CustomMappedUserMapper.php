@@ -63,7 +63,7 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
     {
         return new DeleteUserDto(
             realm: $this->getRealm($localUser),
-            userId: Uuid::fromString($localUser->getId()),
+            userId: Uuid::fromString($localUser->getKeycloakId()),
         );
     }
 
@@ -75,7 +75,7 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
     ): UpdateUserDto {
         return new UpdateUserDto(
             realm: $this->getRealm($newUserVersion),
-            userId: Uuid::fromString($newUserVersion->getId()),
+            userId: Uuid::fromString($newUserVersion->getKeycloakId()),
             profile: new UpdateUserProfileDto(
                 username: $newUserVersion->getUsername(),
                 email: $newUserVersion->getEmail(),

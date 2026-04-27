@@ -74,12 +74,20 @@ This minimal setup assumes your container already provides:
 - a PSR-18 HTTP client
 - PSR-17 request and stream factories
 
+Your user entity must also implement
+`Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`.
+
+Important distinction:
+
+- the Doctrine identifier is used as the local-to-Keycloak reference attribute
+- `getKeycloakId()` is used for Keycloak-side update, delete, and lookup operations
+
 ## Start Here
 
 - [Quick Start](docs/quick-start.md)
   Full happy-path example with minimal config, one-time bootstrap through `KeycloakBootstrapper`, and create/update/delete calls.
 - [Configuration Guide](docs/configuration.md)
-  Required fields, optional fields, `attributes_map`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
+  Required fields, optional fields, `attributes_map`, `required`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
 - [Security Guide](docs/security.md)
   `KeycloakJwtAuthenticator`, JWT identifier claim resolution, firewall setup, and role extraction.
 
@@ -101,6 +109,7 @@ You can autowire these interfaces directly:
 
 - The bundle does not mutate Keycloak realm configuration automatically during `createUser()`, `updateUser()`, or `loginUser()`.
 - Keycloak profile attribute bootstrap is an explicit application concern via `KeycloakBootstrapper`.
+- Use `ensureUserIdentifierAttribute()` for the minimal happy path, or `ensureConfiguredAttributes()` when you want the whole `attributes_map` to be synchronized explicitly.
 - The default mapper is intentionally conservative; if your app needs different login or projection rules, switch the entity to a custom mapper.
 
 ## Development

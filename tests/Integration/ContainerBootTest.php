@@ -157,12 +157,17 @@ final class ContainerBootTest extends KernelTestCase
                     'attribute_name' => 'local-user-id',
                     'jwt_claim_name' => null,
                     'create_if_missing' => true,
+                    'required' => [
+                        'roles' => ['admin'],
+                        'scopes' => ['openid'],
+                    ],
                 ],
                 [
                     'property' => 'firstName',
                     'attribute_name' => 'profile-first-name',
                     'jwt_claim_name' => null,
                     'create_if_missing' => true,
+                    'required' => false,
                 ],
             ],
         );
@@ -170,6 +175,10 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('id', $userEntityConfig->getUserIdentifierField());
         self::assertCount(2, $userEntityConfig->getAttributeConfigs());
         self::assertSame(['local-user-id', 'local_user_id'], $userEntityConfig->getUserIdentifierJwtClaimNames());
+        self::assertSame(
+            ['roles' => ['admin'], 'scopes' => ['openid']],
+            $userEntityConfig->getUserIdentifierAttributeConfig()->getRequired()?->toArray(),
+        );
         self::assertSame(
             'local-user-id',
             $userEntityConfig->buildEnsureUserIdentifierAttributeDto()->getAttributeName()
@@ -197,7 +206,7 @@ final class ContainerBootTest extends KernelTestCase
         $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
 
         self::assertSame('users-realm', $dto->getRealm());
-        self::assertSame($user->getId(), $dto->getUserId()->toString());
+        self::assertSame($user->getKeycloakId(), $dto->getUserId()->toString());
     }
 
     public function testUserEntityLoginMapping(): void
@@ -259,7 +268,7 @@ final class ContainerBootTest extends KernelTestCase
         );
 
         self::assertSame('users-realm', $dto->getRealm());
-        self::assertSame($newUser->getId(), $dto->getUserId()->toString());
+        self::assertSame($newUser->getKeycloakId(), $dto->getUserId()->toString());
         self::assertSame('after@example.test', $dto->getProfile()->getEmail());
         self::assertNotNull($dto->getProfile()->getRoles());
         self::assertCount(2, $dto->getProfile()->getRoles());

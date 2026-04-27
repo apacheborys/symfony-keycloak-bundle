@@ -13,6 +13,7 @@ The idea is:
 
 - your user entity is managed by Doctrine
 - your user entity implements `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
+- `KeycloakUserInterface::getKeycloakId()` returns the actual Keycloak user id for update, delete, and lookup operations
 - Symfony container already exposes:
   `Doctrine\Persistence\ManagerRegistry`,
   `Psr\Http\Client\ClientInterface`,
@@ -95,6 +96,13 @@ Notes:
 - if your Doctrine identifier field is not `id`, the bridge still resolves it automatically
 - if you customized identifier mapping through `attributes_map`, the bootstrapper uses that configuration too
 
+If you configured extra `attributes_map` entries with `create_if_missing`,
+`jwt_claim_name`, or `required`, bootstrap all of them explicitly:
+
+```php
+$this->keycloakBootstrapper->ensureConfiguredAttributes(User::class);
+```
+
 ## 3. Create, Update, and Delete Users
 
 Once the attribute is bootstrapped, the service API is intentionally small.
@@ -145,7 +153,7 @@ The default bridge behavior here is:
 - `createUser()` resolves realm from `user_entities`
 - `createUser()` sends mapped attributes automatically, including the Doctrine identifier
 - `updateUser()` computes the diff between old and new local user versions
-- `deleteUser()` uses the local entity ID as the Keycloak user ID reference
+- `updateUser()` and `deleteUser()` use `getKeycloakId()` as the Keycloak-side user reference
 
 ```mermaid
 sequenceDiagram

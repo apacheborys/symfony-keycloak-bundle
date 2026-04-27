@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
 use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
+use Apacheborys\KeycloakPhpClient\DTO\Response\Realm\UserProfile\AttributeRequiredDto;
 use BackedEnum;
 use InvalidArgumentException;
 use LogicException;
@@ -17,12 +18,20 @@ final readonly class UserEntityAttributeConfig
     /** @var class-string */
     private string $className;
 
+    private bool $hasRequiredConfiguration;
+
+    private ?AttributeRequiredDto $required;
+
+    /**
+     * @param array{roles?: list<string>, scopes?: list<string>}|bool|null $required
+     */
     public function __construct(
         string $className,
         private string $property,
         private ?string $attributeName = null,
         private ?string $jwtClaimName = null,
         private bool $createIfMissing = false,
+        array|bool|null $required = null,
     ) {
         if (!class_exists($className)) {
             throw new InvalidArgumentException(
@@ -32,6 +41,8 @@ final readonly class UserEntityAttributeConfig
 
         /** @var class-string $className */
         $this->className = $className;
+        $this->hasRequiredConfiguration = $required !== null;
+        $this->required = $this->normalizeRequired(required: $required);
 
         if ($this->property === '') {
             throw new InvalidArgumentException('The "property" configuration value cannot be empty.');
@@ -93,17 +104,27 @@ final readonly class UserEntityAttributeConfig
         return $this->jwtClaimName !== null;
     }
 
-    public function shouldEnsureAttribute(): bool
+    public function hasRequiredConfiguration(): bool
     {
-        return $this->createIfMissing || $this->shouldExposeInJwt();
+        return $this->hasRequiredConfiguration;
     }
 
-    public function buildEnsureAttributeDto(): EnsureUserIdentifierAttributeDto
+    public function getRequired(): ?AttributeRequiredDto
+    {
+        return $this->required;
+    }
+
+    public function requiresBootstrapSync(): bool
+    {
+        return $this->createIfMissing || $this->shouldExposeInJwt() || $this->hasRequiredConfiguration;
+    }
+
+    public function buildEnsureAttributeDto(bool $forceCreateIfMissing = false): EnsureUserIdentifierAttributeDto
     {
         return new EnsureUserIdentifierAttributeDto(
             attributeName: $this->getAttributeName(),
             displayName: $this->buildAttributeDisplayName(),
-            createIfMissing: $this->createIfMissing,
+            createIfMissing: $forceCreateIfMissing || $this->createIfMissing,
             exposeInJwt: $this->shouldExposeInJwt(),
             jwtClaimName: $this->jwtClaimName,
         );
@@ -181,5 +202,82 @@ final readonly class UserEntityAttributeConfig
     private function buildAttributeDisplayName(): string
     {
         return ucwords(str_replace(['-', '_', '.'], ' ', $this->getAttributeName()));
+    }
+
+    /**
+     * @param array{roles?: list<string>, scopes?: list<string>}|bool|null $required
+     */
+    private function normalizeRequired(array|bool|null $required): ?AttributeRequiredDto
+    {
+        if ($required === null || $required === false) {
+            return null;
+        }
+
+        if ($required === true) {
+            return new AttributeRequiredDto();
+        }
+
+        $unknownKeys = array_diff(array_keys($required), ['roles', 'scopes']);
+        if ($unknownKeys !== []) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Configured "required" options for attribute "%s" on "%s" contain unsupported keys: %s.',
+                    $this->property,
+                    $this->className,
+                    implode(', ', $unknownKeys),
+                )
+            );
+        }
+
+        /** @var list<string> $roles */
+        $roles = $this->normalizeRequiredStringList(
+            fieldName: 'roles',
+            value: $required['roles'] ?? [],
+        );
+        /** @var list<string> $scopes */
+        $scopes = $this->normalizeRequiredStringList(
+            fieldName: 'scopes',
+            value: $required['scopes'] ?? [],
+        );
+
+        return new AttributeRequiredDto(
+            roles: $roles,
+            scopes: $scopes,
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeRequiredStringList(string $fieldName, mixed $value): array
+    {
+        if (!is_array($value)) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Configured "required.%s" for attribute "%s" on "%s" must be an array of strings.',
+                    $fieldName,
+                    $this->property,
+                    $this->className,
+                )
+            );
+        }
+
+        $normalizedValues = [];
+        foreach ($value as $item) {
+            if (!is_string($item) || trim($item) === '') {
+                throw new InvalidArgumentException(
+                    sprintf(
+                        'Configured "required.%s" for attribute "%s" on "%s" must contain only non-empty strings.',
+                        $fieldName,
+                        $this->property,
+                        $this->className,
+                    )
+                );
+            }
+
+            $normalizedValues[] = trim($item);
+        }
+
+        return $normalizedValues;
     }
 }

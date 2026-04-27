@@ -23,12 +23,17 @@ final class UserEntityConfigTest extends TestCase
                     'attribute_name' => 'local-user-id',
                     'jwt_claim_name' => null,
                     'create_if_missing' => true,
+                    'required' => [
+                        'roles' => ['admin'],
+                        'scopes' => ['openid'],
+                    ],
                 ],
                 [
                     'property' => 'firstName',
                     'attribute_name' => 'profile-first-name',
                     'jwt_claim_name' => null,
                     'create_if_missing' => false,
+                    'required' => false,
                 ],
             ],
         );
@@ -36,6 +41,10 @@ final class UserEntityConfigTest extends TestCase
         self::assertSame('id', $config->getUserIdentifierField());
         self::assertCount(2, $config->getAttributeConfigs());
         self::assertSame(['local-user-id', 'local_user_id'], $config->getUserIdentifierJwtClaimNames());
+        self::assertSame(
+            ['roles' => ['admin'], 'scopes' => ['openid']],
+            $config->getUserIdentifierAttributeConfig()->getRequired()?->toArray(),
+        );
         self::assertSame('local-user-id', $config->buildEnsureUserIdentifierAttributeDto()->getAttributeName());
         self::assertSame(
             [
@@ -72,6 +81,7 @@ final class UserEntityConfigTest extends TestCase
         self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getAttributeName());
         self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getJwtClaimName());
         self::assertSame(['id'], $config->getUserIdentifierJwtClaimNames());
+        self::assertFalse($config->getUserIdentifierAttributeConfig()->hasRequiredConfiguration());
     }
 
     public function testBuildBootstrapUserIdentifierAttributeDtoForcesCreateIfMissing(): void
@@ -88,6 +98,27 @@ final class UserEntityConfigTest extends TestCase
         self::assertTrue($dto->shouldExposeInJwt());
         self::assertSame('id', $dto->getAttributeName());
         self::assertSame('id', $dto->getJwtClaimName());
+    }
+
+    public function testTracksExplicitRequiredDisableSeparatelyFromOmittedRequired(): void
+    {
+        $config = new UserEntityConfig(
+            realm: 'users-realm',
+            className: LocalUser::class,
+            userIdentifierField: 'id',
+            attributesMap: [
+                [
+                    'property' => 'id',
+                    'attribute_name' => null,
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => false,
+                    'required' => false,
+                ],
+            ],
+        );
+
+        self::assertTrue($config->getUserIdentifierAttributeConfig()->hasRequiredConfiguration());
+        self::assertNull($config->getUserIdentifierAttributeConfig()->getRequired());
     }
 
     public function testRejectsDuplicatedAttributeProperty(): void

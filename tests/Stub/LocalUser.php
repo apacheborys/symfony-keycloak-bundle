@@ -13,6 +13,7 @@ final readonly class LocalUser implements KeycloakUserInterface
 {
     public function __construct(
         private string $id = '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
+        private string $keycloakId = '5d9f44d8-a86e-4028-a237-8fe2e5ecdb44',
         private string $username = 'local-username',
         private string $email = 'local@example.test',
         private bool $emailVerified = true,
@@ -26,9 +27,9 @@ final readonly class LocalUser implements KeycloakUserInterface
     }
 
     #[Override]
-    public function getId(): string
+    public function getKeycloakId(): string
     {
-        return $this->id;
+        return $this->keycloakId;
     }
 
     #[Override]
@@ -70,6 +71,11 @@ final readonly class LocalUser implements KeycloakUserInterface
     public function getLocalIdentifier(): string
     {
         return $this->localIdentifier;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
     }
 
     #[Override]

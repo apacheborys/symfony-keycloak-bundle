@@ -21,7 +21,8 @@ final readonly class UserEntityConfig
      *  property: string,
      *  attribute_name: string|null,
      *  jwt_claim_name: string|null,
-     *  create_if_missing: bool
+     *  create_if_missing: bool,
+     *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }> $attributesMap
      */
     public function __construct(
@@ -120,18 +121,7 @@ final readonly class UserEntityConfig
 
     public function buildBootstrapUserIdentifierAttributeDto(): EnsureUserIdentifierAttributeDto
     {
-        $dto = $this->buildEnsureUserIdentifierAttributeDto();
-        $shouldExposeInJwt = $dto->shouldExposeInJwt();
-
-        return new EnsureUserIdentifierAttributeDto(
-            attributeName: $dto->getAttributeName(),
-            displayName: $dto->getDisplayName(),
-            createIfMissing: true,
-            exposeInJwt: $shouldExposeInJwt,
-            clientScopeName: $dto->getClientScopeName(),
-            jwtClaimName: $shouldExposeInJwt ? $dto->getJwtClaimName() : null,
-            protocolMapperName: $shouldExposeInJwt ? $dto->getProtocolMapperName() : null,
-        );
+        return $this->getUserIdentifierAttributeConfig()->buildEnsureAttributeDto(forceCreateIfMissing: true);
     }
 
     /**
@@ -152,7 +142,8 @@ final readonly class UserEntityConfig
      *  property: string,
      *  attribute_name: string|null,
      *  jwt_claim_name: string|null,
-     *  create_if_missing: bool
+     *  create_if_missing: bool,
+     *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }> $attributesMap
      * @return list<UserEntityAttributeConfig>
      */
@@ -170,6 +161,7 @@ final readonly class UserEntityConfig
                 attributeName: $attributeConfig['attribute_name'],
                 jwtClaimName: $attributeConfig['jwt_claim_name'],
                 createIfMissing: $attributeConfig['create_if_missing'],
+                required: $attributeConfig['required'] ?? null,
             );
 
             $property = $resolvedAttributeConfig->getProperty();
@@ -207,13 +199,15 @@ final readonly class UserEntityConfig
      *  property: string,
      *  attribute_name: string|null,
      *  jwt_claim_name: string|null,
-     *  create_if_missing: bool
+     *  create_if_missing: bool,
+     *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }> $attributesMap
      * @return list<array{
      *  property: string,
      *  attribute_name: string|null,
      *  jwt_claim_name: string|null,
-     *  create_if_missing: bool
+     *  create_if_missing: bool,
+     *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }>
      */
     private function normalizeAttributeMap(array $attributesMap): array
@@ -237,6 +231,7 @@ final readonly class UserEntityConfig
                 'attribute_name' => null,
                 'jwt_claim_name' => $this->buildDefaultJwtClaimName(attributeName: $this->userIdentifierField),
                 'create_if_missing' => false,
+                'required' => null,
             ],
         );
 

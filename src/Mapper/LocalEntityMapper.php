@@ -99,7 +99,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
 
         return new DeleteUserDto(
             realm: $userConfig->getRealm(),
-            userId: Uuid::fromString($localUser->getId()),
+            userId: Uuid::fromString($localUser->getKeycloakId()),
         );
     }
 
@@ -167,7 +167,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
 
         return new UpdateUserDto(
             realm: $newUserConfig->getRealm(),
-            userId: Uuid::fromString($newUserVersion->getId()),
+            userId: Uuid::fromString($newUserVersion->getKeycloakId()),
             profile: $profile,
         );
     }

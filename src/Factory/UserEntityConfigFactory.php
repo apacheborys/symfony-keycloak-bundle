@@ -21,7 +21,8 @@ final readonly class UserEntityConfigFactory
      *  property: string,
      *  attribute_name: string|null,
      *  jwt_claim_name: string|null,
-     *  create_if_missing: bool
+     *  create_if_missing: bool,
+     *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }> $attributesMap
      */
     public function create(

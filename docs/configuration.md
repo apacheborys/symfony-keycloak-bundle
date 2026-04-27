@@ -76,6 +76,12 @@ uses the resolved entity configuration internally, so the application can simply
 $this->keycloakBootstrapper->ensureUserIdentifierAttribute(App\Entity\User::class);
 ```
 
+If you want to bootstrap every configured `attributes_map` entry, use:
+
+```php
+$this->keycloakBootstrapper->ensureConfiguredAttributes(App\Entity\User::class);
+```
+
 ## `attributes_map`
 
 Use `attributes_map` when you want to project more than just the Doctrine identifier field.
@@ -89,9 +95,12 @@ keycloak_bridge:
         - property: 'id'
           attribute_name: 'local-user-id'
           create_if_missing: true
+          required: false
         - property: 'departmentCode'
           attribute_name: 'department-code'
           jwt_claim_name: 'department_code'
+          required:
+            roles: ['admin']
         - property: 'firstName'
           attribute_name: 'profile-first-name'
 ```
@@ -104,6 +113,7 @@ Per-attribute options:
 | `attribute_name` | no | same as `property` | Keycloak attribute name |
 | `jwt_claim_name` | no | `null` | If set, the attribute is expected in JWT payload under that claim |
 | `create_if_missing` | no | `false` | Declarative metadata for explicit Keycloak bootstrap flows |
+| `required` | no | `null` | Optional Keycloak user-profile `required` rule. Accepts `false`, `true`, or `{ roles, scopes }` |
 
 Important behavior:
 
@@ -111,6 +121,35 @@ Important behavior:
 - duplicated `property` values are rejected
 - duplicated Keycloak `attribute_name` values are rejected
 - blank names are rejected early during container build
+- `required: true` means "always required"
+- `required: false` explicitly removes Keycloak `required` rules during bootstrap
+- omitting `required` leaves the current Keycloak rule as-is; for freshly created attributes this means the underlying client defaults still apply
+
+### `required`
+
+The bridge projects the typed Keycloak `required` fields that are supported by
+`apacheborys/keycloak-php-client`.
+
+Examples:
+
+```yaml
+attributes_map:
+  - property: 'id'
+    required: true
+  - property: 'departmentCode'
+    required:
+      roles: ['admin']
+      scopes: ['openid']
+  - property: 'firstName'
+    required: false
+```
+
+Interpretation:
+
+- `true` means the attribute is required unconditionally
+- `roles` and `scopes` map directly to Keycloak required rules
+- `false` tells the bootstrapper to remove the `required` block from that attribute
+- `null` or omission means the bridge does not override the existing rule
 
 ## Role Projection
 

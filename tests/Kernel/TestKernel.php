@@ -151,11 +151,15 @@ final class TestKernel extends Kernel
                                 'property' => 'id',
                                 'attribute_name' => 'local-user-id',
                                 'create_if_missing' => true,
+                                'required' => [
+                                    'roles' => ['admin'],
+                                ],
                             ],
                             [
                                 'property' => 'firstName',
                                 'attribute_name' => 'profile-first-name',
                                 'create_if_missing' => true,
+                                'required' => false,
                             ],
                         ],
                         'role_prefix' => 'payment.',
