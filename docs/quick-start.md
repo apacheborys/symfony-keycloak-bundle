@@ -39,7 +39,7 @@ What you are not configuring here on purpose:
 - no `user_identifier_field`
 - no `attributes_map`
 - no `mapper`
-- no role prefix/suffix
+- no `role` block
 
 The bundle fills the gap automatically:
 
@@ -185,6 +185,6 @@ sequenceDiagram
 If you want more than the default happy path:
 
 - [Configuration Guide](configuration.md)
-  for `attributes_map`, role prefix/suffix, custom mapper classes, and infrastructure services
+  for `attributes_map`, entity-level `role` options, custom mapper classes, and infrastructure services
 - [Security Guide](security.md)
   for JWT authentication inside Symfony Security

@@ -40,7 +40,6 @@ When you keep configuration minimal, the bridge still does real work for you:
 | `stream_factory_service` | no | Symfony service ID for PSR-17 stream factory |
 | `cache_pool` | no | PSR-6 cache pool service ID |
 | `logger_service` | no | PSR-3 logger service ID |
-| `allow_role_creation` | no | Allow creation of missing Keycloak roles during sync |
 | `realm_list_ttl` | no | Cache TTL for realm listing |
 
 If you omit the service IDs, the bundle relies on container aliases for the related PSR interfaces.
@@ -62,8 +61,7 @@ Per-entity options:
 | --- | --- | --- | --- |
 | `realm` | yes | none | Target Keycloak realm for this entity |
 | `attributes_map` | no | `[]` | Additional local property to Keycloak attribute mappings |
-| `role_prefix` | no | `''` | Prefix applied before local role names are projected |
-| `role_suffix` | no | `''` | Suffix applied after local role names are projected |
+| `role` | no | `{ allow_creation: false, prefix: '', suffix: '' }` | Entity-level role projection and auto-creation behavior |
 | `mapper` | no | `Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper` | Mapper service class for this entity |
 
 The bridge-level bootstrap service:
@@ -151,19 +149,46 @@ Interpretation:
 - `false` tells the bootstrapper to remove the `required` block from that attribute
 - `null` or omission means the bridge does not override the existing rule
 
-## Role Projection
+## `role`
 
-By default local roles are forwarded as-is.
-
-If you need Keycloak-visible namespacing, add prefix and suffix:
+Role behavior is now configured per entity:
 
 ```yaml
 keycloak_bridge:
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
-      role_prefix: 'payment.'
-      role_suffix: '.svc'
+      role:
+        allow_creation: true
+        prefix: 'payment.'
+        suffix: '.svc'
+```
+
+Role options:
+
+| Option | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `allow_creation` | no | `false` | Allow the default mapper to emit placeholder `RoleDto` objects for roles missing in Keycloak |
+| `prefix` | no | `''` | Prefix applied before local role names are projected |
+| `suffix` | no | `''` | Suffix applied after local role names are projected |
+
+Behavior:
+
+- local role names are projected through `prefix` and `suffix`
+- if a projected role already exists in Keycloak, the mapper reuses the existing `RoleDto`
+- if a projected role is missing and `allow_creation=true`, the default mapper returns a placeholder `RoleDto`, and `keycloak-php-client` creates the role during synchronization
+- if a projected role is missing and `allow_creation=false`, the default mapper throws explicitly instead of silently dropping the role
+
+Example:
+
+```yaml
+keycloak_bridge:
+  user_entities:
+    App\Entity\User:
+      realm: '%env(KEYCLOAK_USERS_REALM)%'
+      role:
+        prefix: 'payment.'
+        suffix: '.svc'
 ```
 
 With that config:

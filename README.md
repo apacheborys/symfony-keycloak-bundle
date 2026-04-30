@@ -87,7 +87,7 @@ Important distinction:
 - [Quick Start](docs/quick-start.md)
   Full happy-path example with minimal config, one-time bootstrap through `KeycloakBootstrapper`, and create/update/delete calls.
 - [Configuration Guide](docs/configuration.md)
-  Required fields, optional fields, `attributes_map`, `required`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
+  Required fields, optional fields, `attributes_map`, `required`, entity-level `role` settings, custom mapper wiring, and automatic Doctrine behavior.
 - [Security Guide](docs/security.md)
   `KeycloakJwtAuthenticator`, JWT identifier claim resolution, firewall setup, and role extraction.
 

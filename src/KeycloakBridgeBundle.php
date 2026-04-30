@@ -54,7 +54,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ->scalarNode('stream_factory_service')->defaultNull()->end()
                 ->scalarNode('cache_pool')->defaultNull()->end()
                 ->scalarNode('logger_service')->defaultNull()->end()
-                ->booleanNode('allow_role_creation')->defaultFalse()->end()
                 ->integerNode('realm_list_ttl')->min(0)->defaultValue(3600)->end()
                 ->arrayNode('user_entities')
                     ->useAttributeAsKey('class')
@@ -73,8 +72,14 @@ final class KeycloakBridgeBundle extends AbstractBundle
                                 ->end()
                                 ->defaultValue([])
                             ->end()
-                            ->scalarNode('role_prefix')->defaultValue('')->end()
-                            ->scalarNode('role_suffix')->defaultValue('')->end()
+                            ->arrayNode('role')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->booleanNode('allow_creation')->defaultFalse()->end()
+                                    ->scalarNode('prefix')->defaultValue('')->end()
+                                    ->scalarNode('suffix')->defaultValue('')->end()
+                                ->end()
+                            ->end()
                             ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
                         ->end()
                     ->end()
@@ -95,7 +100,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  stream_factory_service: string|null,
      *  cache_pool: string|null,
      *  logger_service: string|null,
-     *  allow_role_creation: bool,
      *  realm_list_ttl: int,
      *  user_entities: array<string, array{
      *      realm: string,
@@ -106,8 +110,11 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *          create_if_missing: bool,
      *          required: array{roles?: list<string>, scopes?: list<string>}|bool|null
      *      }>,
-     *      role_prefix: string,
-     *      role_suffix: string,
+     *      role: array{
+     *          allow_creation: bool,
+     *          prefix: string,
+     *          suffix: string
+     *      },
      *      mapper: string
      *  }>
      * } $config
@@ -179,7 +186,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     service(serviceId: KeycloakHttpClientInterface::class),
                     tagged_iterator(tag: 'keycloak.local_user_mapper'),
                     $loggerRef,
-                    $config['allow_role_creation'],
                 ]
             );
 
@@ -249,8 +255,9 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     arguments: [
                         $userEntityConfig['realm'],
                         $normalizedClassName,
-                        $userEntityConfig['role_prefix'],
-                        $userEntityConfig['role_suffix'],
+                        $userEntityConfig['role']['allow_creation'],
+                        $userEntityConfig['role']['prefix'],
+                        $userEntityConfig['role']['suffix'],
                         $mapperClass,
                         $userEntityConfig['attributes_map'],
                     ]

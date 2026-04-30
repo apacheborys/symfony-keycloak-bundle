@@ -28,6 +28,7 @@ final readonly class UserEntityConfigFactory
     public function create(
         string $realm,
         string $className,
+        bool $roleAllowCreation = false,
         string $rolePrefix = '',
         string $roleSuffix = '',
         string $mapper = LocalEntityMapper::class,
@@ -37,6 +38,7 @@ final readonly class UserEntityConfigFactory
             realm: $realm,
             className: $className,
             userIdentifierField: $this->identifierFieldResolver->resolve($className),
+            roleAllowCreation: $roleAllowCreation,
             rolePrefix: $rolePrefix,
             roleSuffix: $roleSuffix,
             mapper: $mapper,

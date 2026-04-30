@@ -203,7 +203,23 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 ),
             ) as $roleName
         ) {
-            $resolved[] = $availableByName[$roleName] ?? new RoleDto(name: $roleName);
+            $availableRole = $availableByName[$roleName] ?? null;
+            if ($availableRole instanceof RoleDto) {
+                $resolved[] = $availableRole;
+                continue;
+            }
+
+            if (!$userConfig->isRoleCreationAllowed()) {
+                throw new LogicException(
+                    sprintf(
+                        'Role "%s" is missing in Keycloak and role.allow_creation is disabled for "%s".',
+                        $roleName,
+                        $userConfig->getClassName(),
+                    )
+                );
+            }
+
+            $resolved[] = new RoleDto(name: $roleName);
         }
 
         return $resolved;

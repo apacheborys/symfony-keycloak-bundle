@@ -17,6 +17,9 @@ final class UserEntityConfigTest extends TestCase
             realm: 'users-realm',
             className: LocalUser::class,
             userIdentifierField: 'id',
+            roleAllowCreation: true,
+            rolePrefix: 'payment.',
+            roleSuffix: '.svc',
             attributesMap: [
                 [
                     'property' => 'id',
@@ -39,6 +42,9 @@ final class UserEntityConfigTest extends TestCase
         );
 
         self::assertSame('id', $config->getUserIdentifierField());
+        self::assertTrue($config->isRoleCreationAllowed());
+        self::assertSame('payment.', $config->getRolePrefix());
+        self::assertSame('.svc', $config->getRoleSuffix());
         self::assertCount(2, $config->getAttributeConfigs());
         self::assertSame(['local-user-id', 'local_user_id'], $config->getUserIdentifierJwtClaimNames());
         self::assertSame(

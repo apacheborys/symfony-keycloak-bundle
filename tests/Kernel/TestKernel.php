@@ -162,8 +162,11 @@ final class TestKernel extends Kernel
                                 'required' => false,
                             ],
                         ],
-                        'role_prefix' => 'payment.',
-                        'role_suffix' => '.svc',
+                        'role' => [
+                            'allow_creation' => true,
+                            'prefix' => 'payment.',
+                            'suffix' => '.svc',
+                        ],
                     ],
                     CustomMappedUser::class => [
                         'realm' => 'custom-realm',

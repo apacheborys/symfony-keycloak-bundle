@@ -29,6 +29,7 @@ final readonly class UserEntityConfig
         private string $realm,
         string $className,
         private string $userIdentifierField,
+        private bool $roleAllowCreation = false,
         private string $rolePrefix = '',
         private string $roleSuffix = '',
         private string $mapper = LocalEntityMapper::class,
@@ -69,6 +70,11 @@ final readonly class UserEntityConfig
     public function getRolePrefix(): string
     {
         return $this->rolePrefix;
+    }
+
+    public function isRoleCreationAllowed(): bool
+    {
+        return $this->roleAllowCreation;
     }
 
     public function getRoleSuffix(): string
