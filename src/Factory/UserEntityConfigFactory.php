@@ -6,15 +6,9 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Factory;
 
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\UserEntityIdentifierFieldResolverInterface;
 
 final readonly class UserEntityConfigFactory
 {
-    public function __construct(
-        private UserEntityIdentifierFieldResolverInterface $identifierFieldResolver,
-    ) {
-    }
-
     /**
      * @param class-string $className
      * @param list<array{
@@ -37,7 +31,6 @@ final readonly class UserEntityConfigFactory
         return new UserEntityConfig(
             realm: $realm,
             className: $className,
-            userIdentifierField: $this->identifierFieldResolver->resolve($className),
             roleAllowCreation: $roleAllowCreation,
             rolePrefix: $rolePrefix,
             roleSuffix: $roleSuffix,

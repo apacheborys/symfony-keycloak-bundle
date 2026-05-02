@@ -6,6 +6,7 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Model;
 
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\MethodBasedIdentifierUser;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
@@ -16,7 +17,6 @@ final class UserEntityConfigTest extends TestCase
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
             roleAllowCreation: true,
             rolePrefix: 'payment.',
             roleSuffix: '.svc',
@@ -41,7 +41,6 @@ final class UserEntityConfigTest extends TestCase
             ],
         );
 
-        self::assertSame('id', $config->getUserIdentifierField());
         self::assertTrue($config->isRoleCreationAllowed());
         self::assertSame('payment.', $config->getRolePrefix());
         self::assertSame('.svc', $config->getRoleSuffix());
@@ -61,32 +60,36 @@ final class UserEntityConfigTest extends TestCase
         );
     }
 
-    public function testRejectsUnknownConfiguredUserIdentifierField(): void
+    public function testRejectsUnknownConfiguredAttributeProperty(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage(
-            'Configured user identifier field "unknownIdentifierField" was not found on'
-        );
+        $this->expectExceptionMessage('Configured attribute property "unknownIdentifierField" was not found on');
 
         new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'unknownIdentifierField',
+            attributesMap: [
+                [
+                    'property' => 'unknownIdentifierField',
+                    'attribute_name' => 'unknown-identifier',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => false,
+                ],
+            ],
         );
     }
 
-    public function testFallsBackToUserIdentifierFieldAsAttributeName(): void
+    public function testUsesClientDefaultLocalUserIdAttributeNameForImplicitIdentifierMapping(): void
     {
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
         );
 
         self::assertCount(1, $config->getAttributeConfigs());
-        self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getAttributeName());
-        self::assertSame('id', $config->getUserIdentifierAttributeConfig()->getJwtClaimName());
-        self::assertSame(['id'], $config->getUserIdentifierJwtClaimNames());
+        self::assertSame('external-user-id', $config->getUserIdentifierAttributeConfig()->getAttributeName());
+        self::assertSame('external_user_id', $config->getUserIdentifierAttributeConfig()->getJwtClaimName());
+        self::assertSame(['external-user-id', 'external_user_id'], $config->getUserIdentifierJwtClaimNames());
         self::assertFalse($config->getUserIdentifierAttributeConfig()->hasRequiredConfiguration());
     }
 
@@ -95,15 +98,14 @@ final class UserEntityConfigTest extends TestCase
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
         );
 
         $dto = $config->buildBootstrapUserIdentifierAttributeDto();
 
         self::assertTrue($dto->shouldCreateIfMissing());
         self::assertTrue($dto->shouldExposeInJwt());
-        self::assertSame('id', $dto->getAttributeName());
-        self::assertSame('id', $dto->getJwtClaimName());
+        self::assertSame('external-user-id', $dto->getAttributeName());
+        self::assertSame('external_user_id', $dto->getJwtClaimName());
     }
 
     public function testTracksExplicitRequiredDisableSeparatelyFromOmittedRequired(): void
@@ -111,7 +113,6 @@ final class UserEntityConfigTest extends TestCase
         $config = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
             attributesMap: [
                 [
                     'property' => 'id',
@@ -124,6 +125,8 @@ final class UserEntityConfigTest extends TestCase
         );
 
         self::assertTrue($config->getUserIdentifierAttributeConfig()->hasRequiredConfiguration());
+        self::assertSame('external-user-id', $config->getUserIdentifierAttributeConfig()->getAttributeName());
+        self::assertSame('external_user_id', $config->getUserIdentifierAttributeConfig()->getJwtClaimName());
         self::assertNull($config->getUserIdentifierAttributeConfig()->getRequired());
     }
 
@@ -135,7 +138,6 @@ final class UserEntityConfigTest extends TestCase
         new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
             attributesMap: [
                 [
                     'property' => 'id',
@@ -150,6 +152,27 @@ final class UserEntityConfigTest extends TestCase
                     'create_if_missing' => false,
                 ],
             ],
+        );
+    }
+
+    public function testResolvesIdentifierFromGetIdWithoutBackingIdProperty(): void
+    {
+        $config = new UserEntityConfig(
+            realm: 'users-realm',
+            className: MethodBasedIdentifierUser::class,
+            attributesMap: [
+                [
+                    'property' => 'id',
+                    'attribute_name' => 'local-user-id',
+                    'jwt_claim_name' => null,
+                    'create_if_missing' => false,
+                ],
+            ],
+        );
+
+        self::assertSame(
+            ['local-user-id' => 'method-based-local-user-id'],
+            $config->resolveMappedAttributes(new MethodBasedIdentifierUser()),
         );
     }
 }

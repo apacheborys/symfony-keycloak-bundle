@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
 use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
+use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use InvalidArgumentException;
 
@@ -12,6 +13,8 @@ final readonly class UserEntityConfig
 {
     /** @var class-string */
     private string $className;
+
+    private UserEntityAttributeConfig $userIdentifierAttributeConfig;
 
     /** @var list<UserEntityAttributeConfig> */
     private array $attributeConfigs;
@@ -28,7 +31,6 @@ final readonly class UserEntityConfig
     public function __construct(
         private string $realm,
         string $className,
-        private string $userIdentifierField,
         private bool $roleAllowCreation = false,
         private string $rolePrefix = '',
         private string $roleSuffix = '',
@@ -44,12 +46,9 @@ final readonly class UserEntityConfig
         /** @var class-string $className */
         $this->className = $className;
 
-        if ($this->userIdentifierField === '') {
-            throw new InvalidArgumentException('The "userIdentifierField" configuration value cannot be empty.');
-        }
-
-        $this->assertUserIdentifierFieldIsValid();
-        $this->attributeConfigs = $this->buildAttributeConfigs(attributesMap: $attributesMap);
+        $resolvedAttributeConfigs = $this->buildAttributeConfigs(attributesMap: $attributesMap);
+        $this->userIdentifierAttributeConfig = $resolvedAttributeConfigs['identifier'];
+        $this->attributeConfigs = $resolvedAttributeConfigs['attributes'];
     }
 
     public function getRealm(): string
@@ -60,11 +59,6 @@ final readonly class UserEntityConfig
     public function getClassName(): string
     {
         return $this->className;
-    }
-
-    public function getUserIdentifierField(): string
-    {
-        return $this->userIdentifierField;
     }
 
     public function getRolePrefix(): string
@@ -97,19 +91,7 @@ final readonly class UserEntityConfig
 
     public function getUserIdentifierAttributeConfig(): UserEntityAttributeConfig
     {
-        foreach ($this->attributeConfigs as $attributeConfig) {
-            if ($attributeConfig->getProperty() === $this->userIdentifierField) {
-                return $attributeConfig;
-            }
-        }
-
-        throw new InvalidArgumentException(
-            sprintf(
-                'User identifier field "%s" must be represented in attributes_map for "%s".',
-                $this->userIdentifierField,
-                $this->className,
-            )
-        );
+        return $this->userIdentifierAttributeConfig;
     }
 
     /**
@@ -151,13 +133,14 @@ final readonly class UserEntityConfig
      *  create_if_missing: bool,
      *  required?: array{roles?: list<string>, scopes?: list<string>}|bool|null
      * }> $attributesMap
-     * @return list<UserEntityAttributeConfig>
+     * @return array{identifier: UserEntityAttributeConfig, attributes: list<UserEntityAttributeConfig>}
      */
     private function buildAttributeConfigs(array $attributesMap): array
     {
         $normalizedAttributesMap = $this->normalizeAttributeMap(attributesMap: $attributesMap);
 
         $attributeConfigs = [];
+        $identifierAttributeConfig = null;
         $seenProperties = [];
         $seenAttributeNames = [];
         foreach ($normalizedAttributesMap as $attributeConfig) {
@@ -194,10 +177,27 @@ final readonly class UserEntityConfig
             }
             $seenAttributeNames[$attributeName] = true;
 
+            if ($resolvedAttributeConfig->isLocalUserIdProperty()) {
+                $identifierAttributeConfig = $resolvedAttributeConfig;
+            }
+
             $attributeConfigs[] = $resolvedAttributeConfig;
         }
 
-        return $attributeConfigs;
+        if (!$identifierAttributeConfig instanceof UserEntityAttributeConfig) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Configured identifier mapping for "%s" must use attribute property "%s".',
+                    $this->className,
+                    UserEntityAttributeConfig::LOCAL_USER_ID_PROPERTY,
+                )
+            );
+        }
+
+        return [
+            'identifier' => $identifierAttributeConfig,
+            'attributes' => $attributeConfigs,
+        ];
     }
 
     /**
@@ -219,12 +219,13 @@ final readonly class UserEntityConfig
     private function normalizeAttributeMap(array $attributesMap): array
     {
         foreach ($attributesMap as $index => $attributeConfig) {
-            if ($attributeConfig['property'] !== $this->userIdentifierField) {
+            if ($attributeConfig['property'] !== UserEntityAttributeConfig::LOCAL_USER_ID_PROPERTY) {
                 continue;
             }
 
+            $attributesMap[$index]['attribute_name'] ??= $this->getDefaultUserIdentifierAttributeName();
             $attributesMap[$index]['jwt_claim_name'] ??= $this->buildDefaultJwtClaimName(
-                attributeName: $attributeConfig['attribute_name'] ?? $attributeConfig['property']
+                attributeName: $attributesMap[$index]['attribute_name']
             );
 
             return $attributesMap;
@@ -233,9 +234,11 @@ final readonly class UserEntityConfig
         array_unshift(
             $attributesMap,
             [
-                'property' => $this->userIdentifierField,
-                'attribute_name' => null,
-                'jwt_claim_name' => $this->buildDefaultJwtClaimName(attributeName: $this->userIdentifierField),
+                'property' => UserEntityAttributeConfig::LOCAL_USER_ID_PROPERTY,
+                'attribute_name' => $this->getDefaultUserIdentifierAttributeName(),
+                'jwt_claim_name' => $this->buildDefaultJwtClaimName(
+                    attributeName: $this->getDefaultUserIdentifierAttributeName()
+                ),
                 'create_if_missing' => false,
                 'required' => null,
             ],
@@ -244,26 +247,13 @@ final readonly class UserEntityConfig
         return $attributesMap;
     }
 
-    private function assertUserIdentifierFieldIsValid(): void
-    {
-        try {
-            new UserEntityAttributeConfig(
-                className: $this->className,
-                property: $this->userIdentifierField,
-            );
-        } catch (InvalidArgumentException $exception) {
-            $message = str_replace(
-                ['Configured attribute property', 'attribute property'],
-                ['Configured user identifier field', 'user identifier field'],
-                $exception->getMessage(),
-            );
-
-            throw new InvalidArgumentException($message, previous: $exception);
-        }
-    }
-
     private function buildDefaultJwtClaimName(string $attributeName): string
     {
         return str_replace('-', '_', $attributeName);
+    }
+
+    private function getDefaultUserIdentifierAttributeName(): string
+    {
+        return LocalKeycloakUserBridgeMapperInterface::DEFAULT_LOCAL_USER_ID_ATTRIBUTE_NAME;
     }
 }

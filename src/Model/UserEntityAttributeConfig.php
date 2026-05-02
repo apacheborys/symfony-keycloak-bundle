@@ -6,6 +6,7 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
 use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
 use Apacheborys\KeycloakPhpClient\DTO\Response\Realm\UserProfile\AttributeRequiredDto;
+use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use BackedEnum;
 use InvalidArgumentException;
 use LogicException;
@@ -15,6 +16,8 @@ use Stringable;
 
 final readonly class UserEntityAttributeConfig
 {
+    public const string LOCAL_USER_ID_PROPERTY = 'id';
+
     /** @var class-string */
     private string $className;
 
@@ -56,15 +59,19 @@ final readonly class UserEntityAttributeConfig
             throw new InvalidArgumentException('The "jwtClaimName" configuration value cannot be blank.');
         }
 
-        $property = $this->resolveProperty();
-        if ($property->isStatic()) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'Configured attribute property "%s" on "%s" cannot be static.',
-                    $this->property,
-                    $this->className,
-                )
-            );
+        if ($this->isLocalUserIdProperty()) {
+            $this->assertSupportsLocalUserIdResolution();
+        } else {
+            $property = $this->resolveProperty();
+            if ($property->isStatic()) {
+                throw new InvalidArgumentException(
+                    sprintf(
+                        'Configured attribute property "%s" on "%s" cannot be static.',
+                        $this->property,
+                        $this->className,
+                    )
+                );
+            }
         }
     }
 
@@ -130,6 +137,11 @@ final readonly class UserEntityAttributeConfig
         );
     }
 
+    public function isLocalUserIdProperty(): bool
+    {
+        return $this->property === self::LOCAL_USER_ID_PROPERTY;
+    }
+
     public function resolveValue(object $localUser): string
     {
         if (!$localUser instanceof $this->className) {
@@ -142,23 +154,22 @@ final readonly class UserEntityAttributeConfig
             );
         }
 
-        $value = $this->resolveProperty()->getValue($localUser);
+        if ($this->isLocalUserIdProperty()) {
+            if (!$localUser instanceof KeycloakUserInterface) {
+                throw new LogicException(
+                    sprintf(
+                        'Configured identifier property "%s" on "%s" requires %s.',
+                        $this->property,
+                        $this->className,
+                        KeycloakUserInterface::class,
+                    )
+                );
+            }
 
-        return match (true) {
-            is_string($value) => $this->assertStringValue(value: $value),
-            is_int($value), is_float($value) => (string) $value,
-            $value instanceof BackedEnum => is_string($value->value)
-                ? $this->assertStringValue(value: $value->value)
-                : (string) $value->value,
-            $value instanceof Stringable => $this->assertStringValue(value: (string) $value),
-            default => throw new LogicException(
-                sprintf(
-                    'Configured attribute property "%s" on "%s" must resolve to a stringable scalar value.',
-                    $this->property,
-                    $this->className,
-                )
-            ),
-        };
+            return $this->normalizeResolvedValue(value: $localUser->getId());
+        }
+
+        return $this->normalizeResolvedValue(value: $this->resolveProperty()->getValue($localUser));
     }
 
     private function resolveProperty(): ReflectionProperty
@@ -197,6 +208,41 @@ final readonly class UserEntityAttributeConfig
         }
 
         return $value;
+    }
+
+    private function assertSupportsLocalUserIdResolution(): void
+    {
+        if (is_a($this->className, KeycloakUserInterface::class, true)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            sprintf(
+                'Configured attribute property "%s" on "%s" is reserved for %s::getId().',
+                $this->property,
+                $this->className,
+                KeycloakUserInterface::class,
+            )
+        );
+    }
+
+    private function normalizeResolvedValue(mixed $value): string
+    {
+        return match (true) {
+            is_string($value) => $this->assertStringValue(value: $value),
+            is_int($value), is_float($value) => (string) $value,
+            $value instanceof BackedEnum => is_string($value->value)
+                ? $this->assertStringValue(value: $value->value)
+                : (string) $value->value,
+            $value instanceof Stringable => $this->assertStringValue(value: (string) $value),
+            default => throw new LogicException(
+                sprintf(
+                    'Configured attribute property "%s" on "%s" must resolve to a stringable scalar value.',
+                    $this->property,
+                    $this->className,
+                )
+            ),
+        };
     }
 
     private function buildAttributeDisplayName(): string

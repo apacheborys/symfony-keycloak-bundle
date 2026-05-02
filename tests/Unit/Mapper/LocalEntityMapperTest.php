@@ -13,14 +13,13 @@ use PHPUnit\Framework\TestCase;
 
 final class LocalEntityMapperTest extends TestCase
 {
-    public function testPrepareLocalUserForKeycloakUserCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
+    public function testPrepareLocalUserRolesForKeycloakUserCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
     {
         $mapper = new LocalEntityMapper(
             userEntityConfigs: [
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'id',
                     roleAllowCreation: true,
                     rolePrefix: 'payment.',
                     roleSuffix: '.svc',
@@ -30,24 +29,24 @@ final class LocalEntityMapperTest extends TestCase
             clientSecret: 'bridge-secret',
         );
 
-        $dto = $mapper->prepareLocalUserForKeycloakUserCreation(
+        $dto = $mapper->prepareLocalUserRolesForKeycloakUserCreation(
             localUser: new LocalUser(roles: ['ROLE_USER']),
             availableRoles: [],
         );
 
+        self::assertNotNull($dto->getRoles());
         self::assertCount(1, $dto->getRoles());
         self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertNull($dto->getRoles()[0]->getId());
     }
 
-    public function testPrepareLocalUserForKeycloakUserCreationRejectsMissingRoleWhenAutoCreationIsDisabled(): void
+    public function testPrepareLocalUserRolesForKeycloakUserCreationRejectsMissingRoleWhenAutoCreationIsDisabled(): void
     {
         $mapper = new LocalEntityMapper(
             userEntityConfigs: [
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'id',
                     roleAllowCreation: false,
                     rolePrefix: 'payment.',
                     roleSuffix: '.svc',
@@ -60,13 +59,13 @@ final class LocalEntityMapperTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('role.allow_creation is disabled');
 
-        $mapper->prepareLocalUserForKeycloakUserCreation(
+        $mapper->prepareLocalUserRolesForKeycloakUserCreation(
             localUser: new LocalUser(roles: ['ROLE_USER']),
             availableRoles: [],
         );
     }
 
-    public function testPrepareLocalUserForKeycloakUserCreationUsesExistingRoleWhenAvailable(): void
+    public function testPrepareLocalUserRolesForKeycloakUserCreationUsesExistingRoleWhenAvailable(): void
     {
         $existingRole = new RoleDto(name: 'payment.ROLE_USER.svc');
         $mapper = new LocalEntityMapper(
@@ -74,7 +73,6 @@ final class LocalEntityMapperTest extends TestCase
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'id',
                     roleAllowCreation: false,
                     rolePrefix: 'payment.',
                     roleSuffix: '.svc',
@@ -84,11 +82,55 @@ final class LocalEntityMapperTest extends TestCase
             clientSecret: 'bridge-secret',
         );
 
-        $dto = $mapper->prepareLocalUserForKeycloakUserCreation(
+        $dto = $mapper->prepareLocalUserRolesForKeycloakUserCreation(
             localUser: new LocalUser(roles: ['ROLE_USER']),
             availableRoles: [$existingRole],
         );
 
+        self::assertNotNull($dto->getRoles());
         self::assertSame($existingRole, $dto->getRoles()[0]);
+    }
+
+    public function testPrepareLocalUserForKeycloakUserDeletionKeepsLocalUserIdWhenKeycloakIdIsMissing(): void
+    {
+        $mapper = new LocalEntityMapper(
+            userEntityConfigs: [
+                new UserEntityConfig(
+                    realm: 'users-realm',
+                    className: LocalUser::class,
+                ),
+            ],
+            clientId: 'bridge-client',
+            clientSecret: 'bridge-secret',
+        );
+
+        $user = new LocalUser(keycloakId: null);
+        $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
+
+        self::assertNull($dto->getUserId());
+        self::assertSame($user->getId(), $dto->getLocalUserId());
+    }
+
+    public function testImplicitIdentifierMappingUsesClientDefaultAttributeName(): void
+    {
+        $mapper = new LocalEntityMapper(
+            userEntityConfigs: [
+                new UserEntityConfig(
+                    realm: 'users-realm',
+                    className: LocalUser::class,
+                ),
+            ],
+            clientId: 'bridge-client',
+            clientSecret: 'bridge-secret',
+        );
+
+        $user = new LocalUser();
+        $dto = $mapper->prepareLocalUserForKeycloakUserCreation($user);
+
+        self::assertSame('external-user-id', $mapper->getLocalUserIdAttributeName($user));
+        self::assertSame(
+            ['external-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326']],
+            $dto->getAttributes(),
+        );
     }
 }

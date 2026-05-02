@@ -97,7 +97,17 @@ final class ContainerBootTest extends KernelTestCase
         $user = new LocalUser(roles: ['ROLE_USER', 'ROLE_ADMIN']);
         self::assertTrue($mapper->support($user));
 
-        $dto = $mapper->prepareLocalUserForKeycloakUserCreation(
+        $dto = $mapper->prepareLocalUserForKeycloakUserCreation($user);
+        self::assertSame('users-realm', $dto->getRealm());
+        self::assertSame(
+            [
+                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['Local'],
+            ],
+            $dto->getAttributes()
+        );
+
+        $rolesDto = $mapper->prepareLocalUserRolesForKeycloakUserCreation(
             $user,
             [
                 new RoleDto(
@@ -110,17 +120,25 @@ final class ContainerBootTest extends KernelTestCase
                 ),
             ]
         );
-        self::assertSame('users-realm', $dto->getRealm());
-        self::assertCount(2, $dto->getRoles());
-        self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
-        self::assertSame('payment.ROLE_ADMIN.svc', $dto->getRoles()[1]->getName());
-        self::assertSame(
-            [
-                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
-                'profile-first-name' => ['Local'],
-            ],
-            $dto->getAttributes()
-        );
+
+        self::assertSame('users-realm', $rolesDto->getRealm());
+        self::assertNotNull($rolesDto->getRoles());
+        self::assertCount(2, $rolesDto->getRoles());
+        self::assertSame('payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
+        self::assertSame('payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
+    }
+
+    public function testMapperReturnsConfiguredLocalUserIdAttributeName(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $mapper
+         */
+        $mapper = $container->get(LocalEntityMapper::class);
+
+        self::assertSame('local-user-id', $mapper->getLocalUserIdAttributeName(new LocalUser()));
     }
 
     public function testCustomMapperConfigurationOverridesDefaultMapperSupport(): void
@@ -150,7 +168,6 @@ final class ContainerBootTest extends KernelTestCase
         $userEntityConfig = new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
             attributesMap: [
                 [
                     'property' => 'id',
@@ -172,7 +189,6 @@ final class ContainerBootTest extends KernelTestCase
             ],
         );
 
-        self::assertSame('id', $userEntityConfig->getUserIdentifierField());
         self::assertCount(2, $userEntityConfig->getAttributeConfigs());
         self::assertSame(['local-user-id', 'local_user_id'], $userEntityConfig->getUserIdentifierJwtClaimNames());
         self::assertSame(
@@ -206,7 +222,27 @@ final class ContainerBootTest extends KernelTestCase
         $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
 
         self::assertSame('users-realm', $dto->getRealm());
+        self::assertNotNull($dto->getUserId());
         self::assertSame($user->getKeycloakId(), $dto->getUserId()->toString());
+        self::assertSame($user->getId(), $dto->getLocalUserId());
+    }
+
+    public function testUserEntityDeletionMappingWithoutKeycloakIdStillCarriesLocalUserId(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        /**
+         * @var LocalEntityMapper $mapper
+         */
+        $mapper = $container->get(LocalEntityMapper::class);
+
+        $user = new LocalUser(keycloakId: null);
+        $dto = $mapper->prepareLocalUserForKeycloakUserDeletion($user);
+
+        self::assertSame('users-realm', $dto->getRealm());
+        self::assertNull($dto->getUserId());
+        self::assertSame($user->getId(), $dto->getLocalUserId());
     }
 
     public function testUserEntityLoginMapping(): void
@@ -255,6 +291,24 @@ final class ContainerBootTest extends KernelTestCase
         $dto = $mapper->prepareLocalUserDiffForKeycloakUserUpdate(
             oldUserVersion: $oldUser,
             newUserVersion: $newUser,
+        );
+
+        self::assertSame('users-realm', $dto->getRealm());
+        self::assertNotNull($dto->getUserId());
+        self::assertSame($newUser->getKeycloakId(), $dto->getUserId()->toString());
+        self::assertSame($newUser->getId(), $dto->getLocalUserId());
+        self::assertSame('after@example.test', $dto->getProfile()->getEmail());
+        self::assertSame(
+            [
+                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['After'],
+            ],
+            $dto->getProfile()->getAttributes()
+        );
+
+        $rolesDto = $mapper->prepareLocalUserRolesForKeycloakUserUpdate(
+            oldUserVersion: $oldUser,
+            newUserVersion: $newUser,
             availableRoles: [
                 new RoleDto(
                     name: 'payment.ROLE_USER.svc',
@@ -267,19 +321,10 @@ final class ContainerBootTest extends KernelTestCase
             ],
         );
 
-        self::assertSame('users-realm', $dto->getRealm());
-        self::assertSame($newUser->getKeycloakId(), $dto->getUserId()->toString());
-        self::assertSame('after@example.test', $dto->getProfile()->getEmail());
-        self::assertNotNull($dto->getProfile()->getRoles());
-        self::assertCount(2, $dto->getProfile()->getRoles());
-        self::assertSame('payment.ROLE_USER.svc', $dto->getProfile()->getRoles()[0]->getName());
-        self::assertSame('payment.ROLE_ADMIN.svc', $dto->getProfile()->getRoles()[1]->getName());
-        self::assertSame(
-            [
-                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
-                'profile-first-name' => ['After'],
-            ],
-            $dto->getProfile()->getAttributes()
-        );
+        self::assertSame('users-realm', $rolesDto->getRealm());
+        self::assertNotNull($rolesDto->getRoles());
+        self::assertCount(2, $rolesDto->getRoles());
+        self::assertSame('payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
+        self::assertSame('payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
     }
 }

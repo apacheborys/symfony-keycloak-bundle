@@ -5,8 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "apacheborys/keycloak-php-client": "^0.0.14",
-        "doctrine/persistence": "^3.3 || ^4.0",
+        "apacheborys/keycloak-php-client": "^0.0.15",
         "symfony/config": "^7.4",
         "symfony/dependency-injection": "^7.4",
         "symfony/framework-bundle": "^7.4",

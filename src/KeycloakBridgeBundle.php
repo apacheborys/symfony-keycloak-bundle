@@ -20,11 +20,8 @@ use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Factory\UserEntityConfigFactory;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\DoctrineUserEntityIdentifierFieldResolver;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\UserEntityIdentifierFieldResolverInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
-use Doctrine\Persistence\ManagerRegistry;
 use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -227,18 +224,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
             return;
         }
 
-        $services
-            ->set(id: DoctrineUserEntityIdentifierFieldResolver::class)
-            ->args(arguments: [service(serviceId: ManagerRegistry::class)]);
-
-        $services->alias(
-            id: UserEntityIdentifierFieldResolverInterface::class,
-            referencedId: DoctrineUserEntityIdentifierFieldResolver::class,
-        );
-
-        $services
-            ->set(id: UserEntityConfigFactory::class)
-            ->args(arguments: [service(serviceId: UserEntityIdentifierFieldResolverInterface::class)]);
+        $services->set(id: UserEntityConfigFactory::class);
 
         $configuredMapperClasses = [];
         foreach ($config['user_entities'] as $className => $userEntityConfig) {

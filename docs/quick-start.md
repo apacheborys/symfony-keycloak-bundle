@@ -5,17 +5,15 @@ This is the shortest realistic path from Symfony user entity to working Keycloak
 The idea is:
 
 1. configure only the required bundle fields
-2. let Doctrine tell the bundle which local field is the canonical user identifier
+2. let `KeycloakUserInterface::getId()` define the canonical local user identifier
 3. bootstrap that identifier as a Keycloak user-profile attribute once
 4. use `KeycloakServiceInterface` for create, update, and delete operations
 
 ## Prerequisites
 
-- your user entity is managed by Doctrine
 - your user entity implements `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
-- `KeycloakUserInterface::getKeycloakId()` returns the actual Keycloak user id for update, delete, and lookup operations
+- `KeycloakUserInterface::getKeycloakId()` returns the persisted Keycloak user id when your app stores it locally; otherwise the client falls back to the mapped local-id Keycloak attribute
 - Symfony container already exposes:
-  `Doctrine\Persistence\ManagerRegistry`,
   `Psr\Http\Client\ClientInterface`,
   `Psr\Http\Message\RequestFactoryInterface`,
   `Psr\Http\Message\StreamFactoryInterface`
@@ -43,17 +41,18 @@ What you are not configuring here on purpose:
 
 The bundle fills the gap automatically:
 
-- Doctrine resolves the entity identifier field
-- that identifier becomes a Keycloak attribute automatically
-- the same identifier is expected in JWT payload automatically
+- `KeycloakUserInterface::getId()` is treated as the canonical local identifier
+- that identifier becomes the Keycloak attribute `external-user-id` automatically
+- the same identifier is expected in JWT payload automatically as `external_user_id`
 - the default mapper is used automatically
 
-If your Doctrine identifier field is `id`, then the default Keycloak attribute name is also `id`.
-If your identifier field is `uuid`, the default Keycloak attribute name becomes `uuid`.
+This default does not depend on the PHP property name behind `getId()`.
+If your local identifier is backed by `$id`, `$uuid`, or anything else, the default Keycloak attribute name is still `external-user-id`.
+If you want the Keycloak attribute name to match your own convention, configure it explicitly in `attributes_map` with `property: 'id'`.
 
 ```mermaid
 flowchart TD
-    A[Minimal keycloak_bridge config] --> B[Doctrine resolves entity identifier]
+    A[Minimal keycloak_bridge config] --> B[Bundle uses KeycloakUserInterface::getId()]
     B --> C[Bridge builds UserEntityConfig]
     C --> D[LocalEntityMapper projects identifier into Keycloak attributes]
     C --> E[KeycloakJwtAuthenticator expects the same claim in JWT]
@@ -93,8 +92,9 @@ final readonly class KeycloakSetup
 Notes:
 
 - the bridge resolves realm, attribute name, display name, and JWT claim from bundle configuration
-- if your Doctrine identifier field is not `id`, the bridge still resolves it automatically
-- if you customized identifier mapping through `attributes_map`, the bootstrapper uses that configuration too
+- the bridge does not care how the identifier is stored internally as long as `getId()` returns the correct value
+- with minimal config, the bootstrapper creates `external-user-id` and exposes it as the JWT claim `external_user_id`
+- if you customized identifier mapping through `attributes_map` with `property: 'id'`, the bootstrapper uses that configuration too
 
 If you configured extra `attributes_map` entries with `create_if_missing`,
 `jwt_claim_name`, or `required`, bootstrap all of them explicitly:
@@ -151,9 +151,9 @@ final readonly class KeycloakUserLifecycle
 The default bridge behavior here is:
 
 - `createUser()` resolves realm from `user_entities`
-- `createUser()` sends mapped attributes automatically, including the Doctrine identifier
+- `createUser()` sends mapped attributes automatically, including the `getId()` identifier value
 - `updateUser()` computes the diff between old and new local user versions
-- `updateUser()` and `deleteUser()` use `getKeycloakId()` as the Keycloak-side user reference
+- `updateUser()` and `deleteUser()` use `getKeycloakId()` first and fall back to the mapped local-id Keycloak attribute when it is missing
 
 ```mermaid
 sequenceDiagram

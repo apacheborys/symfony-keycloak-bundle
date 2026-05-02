@@ -53,7 +53,6 @@ final class KeycloakBootstrapperTest extends TestCase
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'id',
                     attributesMap: [
                         [
                             'property' => 'id',
@@ -116,7 +115,6 @@ final class KeycloakBootstrapperTest extends TestCase
                 new UserEntityConfig(
                     realm: 'users-realm',
                     className: LocalUser::class,
-                    userIdentifierField: 'id',
                     attributesMap: [
                         [
                             'property' => 'id',
@@ -166,7 +164,6 @@ final class KeycloakBootstrapperTest extends TestCase
         return new UserEntityConfig(
             realm: 'users-realm',
             className: LocalUser::class,
-            userIdentifierField: 'id',
             attributesMap: [
                 [
                     'property' => 'id',

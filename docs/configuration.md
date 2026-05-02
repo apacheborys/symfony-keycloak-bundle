@@ -21,9 +21,9 @@ That is the minimum supported public configuration.
 
 When you keep configuration minimal, the bridge still does real work for you:
 
-- `App\Entity\User` must be Doctrine-managed
-- Doctrine resolves the canonical identifier field automatically
-- that identifier field is inserted into `attributes_map` automatically
+- `App\Entity\User` must implement `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
+- `KeycloakUserInterface::getId()` is treated as the canonical local identifier automatically
+- that identifier mapping is inserted into `attributes_map` automatically under `external-user-id`, unless you override it
 - if the identifier mapping has no explicit `jwt_claim_name`, the bridge derives one automatically
 - `LocalEntityMapper` is selected automatically unless you replace it
 
@@ -82,7 +82,7 @@ $this->keycloakBootstrapper->ensureConfiguredAttributes(App\Entity\User::class);
 
 ## `attributes_map`
 
-Use `attributes_map` when you want to project more than just the Doctrine identifier field.
+Use `attributes_map` when you want to project more than just the canonical local identifier from `KeycloakUserInterface::getId()`.
 
 ```yaml
 keycloak_bridge:
@@ -91,7 +91,7 @@ keycloak_bridge:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
       attributes_map:
         - property: 'id'
-          attribute_name: 'local-user-id'
+          attribute_name: 'external-user-id'
           create_if_missing: true
           required: false
         - property: 'departmentCode'
@@ -107,15 +107,18 @@ Per-attribute options:
 
 | Option | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `property` | yes | none | Local entity property name |
-| `attribute_name` | no | same as `property` | Keycloak attribute name |
+| `property` | yes | none | Local entity property name. The reserved value `id` maps to `KeycloakUserInterface::getId()` |
+| `attribute_name` | no | same as `property` | Keycloak attribute name. For the auto-injected identifier mapping, the default is `external-user-id` |
 | `jwt_claim_name` | no | `null` | If set, the attribute is expected in JWT payload under that claim |
 | `create_if_missing` | no | `false` | Declarative metadata for explicit Keycloak bootstrap flows |
 | `required` | no | `null` | Optional Keycloak user-profile `required` rule. Accepts `false`, `true`, or `{ roles, scopes }` |
 
 Important behavior:
 
-- the Doctrine identifier mapping exists even if you do not declare it
+- the identifier mapping for `KeycloakUserInterface::getId()` exists even if you do not declare it
+- use `property: 'id'` when you want to customize that identifier mapping explicitly
+- if the identifier mapping omits `attribute_name`, the bridge uses `external-user-id`
+- if the identifier mapping omits `jwt_claim_name`, the bridge derives `external_user_id` from that default name
 - duplicated `property` values are rejected
 - duplicated Keycloak `attribute_name` values are rejected
 - blank names are rejected early during container build
@@ -220,22 +223,21 @@ If the mapper needs constructor arguments, define it as a normal Symfony service
 
 ```mermaid
 flowchart TD
-    A[user_entities entry] --> B[Doctrine identifier resolver]
-    B --> C[UserEntityConfigFactory]
-    C --> D[UserEntityConfig]
-    D --> E{attributes_map contains identifier?}
-    E -- no --> F[Inject default identifier mapping]
-    E -- yes --> G[Reuse configured mapping]
-    F --> H[Derive jwt_claim_name if missing]
-    G --> H
-    H --> I[LocalEntityMapper and KeycloakJwtAuthenticator]
+    A[user_entities entry] --> B[UserEntityConfigFactory]
+    B --> C[UserEntityConfig]
+    C --> D{attributes_map contains property: id?}
+    D -- no --> E[Inject default identifier mapping]
+    D -- yes --> F[Reuse configured getId mapping]
+    E --> G[Derive jwt_claim_name if missing]
+    F --> G
+    G --> H[LocalEntityMapper and KeycloakJwtAuthenticator]
 ```
 
 ## When to Keep It Minimal
 
 Stay with the minimal config if:
 
-- your Doctrine identifier field is already the local-to-Keycloak reference you want
+- `getId()` already returns the local-to-Keycloak reference you want
 - the default mapper can use `getUsername()`, `getEmail()`, and roles as-is
 - you do not need extra JWT claims beyond the identifier
 
