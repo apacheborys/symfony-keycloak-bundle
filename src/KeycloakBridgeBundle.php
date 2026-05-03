@@ -18,14 +18,10 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Factory\UserEntityConfigFactory;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\KeycloakBootstrapTargetMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\DoctrineUserEntityIdentifierFieldResolver;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Resolver\UserEntityIdentifierFieldResolverInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
-use Doctrine\Persistence\ManagerRegistry;
 use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -55,7 +51,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ->scalarNode('stream_factory_service')->defaultNull()->end()
                 ->scalarNode('cache_pool')->defaultNull()->end()
                 ->scalarNode('logger_service')->defaultNull()->end()
-                ->booleanNode('allow_role_creation')->defaultFalse()->end()
                 ->integerNode('realm_list_ttl')->min(0)->defaultValue(3600)->end()
                 ->arrayNode('user_entities')
                     ->useAttributeAsKey('class')
@@ -69,12 +64,19 @@ final class KeycloakBridgeBundle extends AbstractBundle
                                         ->scalarNode('attribute_name')->defaultNull()->end()
                                         ->scalarNode('jwt_claim_name')->defaultNull()->end()
                                         ->booleanNode('create_if_missing')->defaultFalse()->end()
+                                        ->variableNode('required')->defaultNull()->end()
                                     ->end()
                                 ->end()
                                 ->defaultValue([])
                             ->end()
-                            ->scalarNode('role_prefix')->defaultValue('')->end()
-                            ->scalarNode('role_suffix')->defaultValue('')->end()
+                            ->arrayNode('role')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->booleanNode('allow_creation')->defaultFalse()->end()
+                                    ->scalarNode('prefix')->defaultValue('')->end()
+                                    ->scalarNode('suffix')->defaultValue('')->end()
+                                ->end()
+                            ->end()
                             ->scalarNode('mapper')->defaultValue(LocalEntityMapper::class)->cannotBeEmpty()->end()
                         ->end()
                     ->end()
@@ -95,7 +97,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  stream_factory_service: string|null,
      *  cache_pool: string|null,
      *  logger_service: string|null,
-     *  allow_role_creation: bool,
      *  realm_list_ttl: int,
      *  user_entities: array<string, array{
      *      realm: string,
@@ -103,10 +104,14 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *          property: string,
      *          attribute_name: string|null,
      *          jwt_claim_name: string|null,
-     *          create_if_missing: bool
+     *          create_if_missing: bool,
+     *          required: array{roles?: list<string>, scopes?: list<string>}|bool|null
      *      }>,
-     *      role_prefix: string,
-     *      role_suffix: string,
+     *      role: array{
+     *          allow_creation: bool,
+     *          prefix: string,
+     *          suffix: string
+     *      },
      *      mapper: string
      *  }>
      * } $config
@@ -178,7 +183,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     service(serviceId: KeycloakHttpClientInterface::class),
                     tagged_iterator(tag: 'keycloak.local_user_mapper'),
                     $loggerRef,
-                    $config['allow_role_creation'],
                 ]
             );
 
@@ -209,6 +213,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
             ->args(
                 arguments: [
                     service(serviceId: KeycloakUserIdentifierAttributeServiceInterface::class),
+                    service(serviceId: KeycloakHttpClientInterface::class),
                     tagged_iterator(tag: 'keycloak.user_entity_config'),
                 ]
             );
@@ -219,22 +224,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
             return;
         }
 
-        $services
-            ->set(id: DoctrineUserEntityIdentifierFieldResolver::class)
-            ->args(arguments: [service(serviceId: ManagerRegistry::class)]);
-
-        $services->alias(
-            id: UserEntityIdentifierFieldResolverInterface::class,
-            referencedId: DoctrineUserEntityIdentifierFieldResolver::class,
-        );
-
-        $services
-            ->set(id: UserEntityConfigFactory::class)
-            ->args(arguments: [service(serviceId: UserEntityIdentifierFieldResolverInterface::class)]);
-
-        $services
-            ->set(id: KeycloakBootstrapTargetMapper::class)
-            ->tag(name: 'keycloak.local_user_mapper');
+        $services->set(id: UserEntityConfigFactory::class);
 
         $configuredMapperClasses = [];
         foreach ($config['user_entities'] as $className => $userEntityConfig) {
@@ -251,8 +241,9 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     arguments: [
                         $userEntityConfig['realm'],
                         $normalizedClassName,
-                        $userEntityConfig['role_prefix'],
-                        $userEntityConfig['role_suffix'],
+                        $userEntityConfig['role']['allow_creation'],
+                        $userEntityConfig['role']['prefix'],
+                        $userEntityConfig['role']['suffix'],
                         $mapperClass,
                         $userEntityConfig['attributes_map'],
                     ]

@@ -10,6 +10,7 @@ use Apacheborys\KeycloakPhpClient\DTO\Request\DeleteUserDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\OidcTokenRequestDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserProfileDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\UserRolesDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
@@ -25,9 +26,14 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
     }
 
     #[Override]
+    public function getLocalUserIdAttributeName(KeycloakUserInterface $localUser): string
+    {
+        return self::DEFAULT_LOCAL_USER_ID_ATTRIBUTE_NAME;
+    }
+
+    #[Override]
     public function prepareLocalUserForKeycloakUserCreation(
-        KeycloakUserInterface $localUser,
-        array $availableRoles
+        KeycloakUserInterface $localUser
     ): CreateUserProfileDto {
         return new CreateUserProfileDto(
             username: $localUser->getUsername(),
@@ -36,6 +42,22 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
             enabled: $localUser->isEnabled(),
             firstName: $localUser->getFirstName(),
             lastName: $localUser->getLastName(),
+            realm: $this->getRealm($localUser),
+            attributes: [
+                $this->getLocalUserIdAttributeName($localUser) => (string) $localUser->getId(),
+            ],
+        );
+    }
+
+    /**
+     * @param list<RoleDto> $availableRoles
+     */
+    #[Override]
+    public function prepareLocalUserRolesForKeycloakUserCreation(
+        KeycloakUserInterface $localUser,
+        array $availableRoles
+    ): UserRolesDto {
+        return new UserRolesDto(
             realm: $this->getRealm($localUser),
             roles: $this->resolveRoles(
                 localRoles: $localUser->getRoles(),
@@ -61,21 +83,24 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
     #[Override]
     public function prepareLocalUserForKeycloakUserDeletion(KeycloakUserInterface $localUser): DeleteUserDto
     {
+        $keycloakId = $localUser->getKeycloakId();
+
         return new DeleteUserDto(
             realm: $this->getRealm($localUser),
-            userId: Uuid::fromString($localUser->getId()),
+            userId: $keycloakId !== null ? Uuid::fromString($keycloakId) : null,
+            localUserId: $localUser->getId(),
         );
     }
 
     #[Override]
     public function prepareLocalUserDiffForKeycloakUserUpdate(
         KeycloakUserInterface $oldUserVersion,
-        KeycloakUserInterface $newUserVersion,
-        array $availableRoles
+        KeycloakUserInterface $newUserVersion
     ): UpdateUserDto {
+        $keycloakId = $newUserVersion->getKeycloakId() ?? $oldUserVersion->getKeycloakId();
+
         return new UpdateUserDto(
             realm: $this->getRealm($newUserVersion),
-            userId: Uuid::fromString($newUserVersion->getId()),
             profile: new UpdateUserProfileDto(
                 username: $newUserVersion->getUsername(),
                 email: $newUserVersion->getEmail(),
@@ -83,10 +108,26 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
                 enabled: $newUserVersion->isEnabled(),
                 firstName: $newUserVersion->getFirstName(),
                 lastName: $newUserVersion->getLastName(),
-                roles: $this->resolveRoles(
-                    localRoles: $newUserVersion->getRoles(),
-                    availableRoles: $availableRoles,
-                ),
+                attributes: [
+                    $this->getLocalUserIdAttributeName($newUserVersion) => (string) $newUserVersion->getId(),
+                ],
+            ),
+            userId: $keycloakId !== null ? Uuid::fromString($keycloakId) : null,
+            localUserId: $newUserVersion->getId(),
+        );
+    }
+
+    #[Override]
+    public function prepareLocalUserRolesForKeycloakUserUpdate(
+        KeycloakUserInterface $oldUserVersion,
+        KeycloakUserInterface $newUserVersion,
+        array $availableRoles
+    ): UserRolesDto {
+        return new UserRolesDto(
+            realm: $this->getRealm($newUserVersion),
+            roles: $this->resolveRoles(
+                localRoles: $newUserVersion->getRoles(),
+                availableRoles: $availableRoles,
             ),
         );
     }

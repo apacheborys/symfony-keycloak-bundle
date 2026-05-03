@@ -9,21 +9,26 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use Override;
 
-final readonly class LocalUser implements KeycloakUserInterface
+final readonly class MethodBasedIdentifierUser implements KeycloakUserInterface
 {
     public function __construct(
-        private string $id = '58f5b67f-bcf4-4d12-86a3-a54f7704f326',
-        private ?string $keycloakId = '5d9f44d8-a86e-4028-a237-8fe2e5ecdb44',
-        private string $username = 'local-username',
-        private string $email = 'local@example.test',
+        private string $localIdentifier = 'method-based-local-user-id',
+        private ?string $keycloakId = null,
+        private string $username = 'method-user',
+        private string $email = 'method@example.test',
         private bool $emailVerified = true,
-        private string $firstName = 'Local',
+        private string $firstName = 'Method',
         private string $lastName = 'User',
         private bool $enabled = true,
-        private string $localIdentifier = 'local-user-reference-58f5b67f-bcf4-4d12-86a3-a54f7704f326',
         /** @var string[] */
         private array $roles = [],
     ) {
+    }
+
+    #[Override]
+    public function getId(): string
+    {
+        return $this->localIdentifier;
     }
 
     #[Override]
@@ -66,16 +71,6 @@ final readonly class LocalUser implements KeycloakUserInterface
     public function getRoles(): array
     {
         return $this->roles;
-    }
-
-    public function getLocalIdentifier(): string
-    {
-        return $this->localIdentifier;
-    }
-
-    public function getId(): string
-    {
-        return $this->id;
     }
 
     #[Override]

@@ -10,12 +10,14 @@ use Apacheborys\KeycloakPhpClient\DTO\Request\DeleteUserDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\OidcTokenRequestDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserDto;
 use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserProfileDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\UserRolesDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use LogicException;
 use Override;
 use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidInterface;
 
 final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperInterface
 {
@@ -45,13 +47,17 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         return $this->getUserConfig(localUser: $localUser)->getRealm();
     }
 
-    /**
-     * @param list<RoleDto> $availableRoles
-     */
+    #[Override]
+    public function getLocalUserIdAttributeName(KeycloakUserInterface $localUser): string
+    {
+        return $this->getUserConfig(localUser: $localUser)
+            ->getUserIdentifierAttributeConfig()
+            ->getAttributeName();
+    }
+
     #[Override]
     public function prepareLocalUserForKeycloakUserCreation(
-        KeycloakUserInterface $localUser,
-        array $availableRoles
+        KeycloakUserInterface $localUser
     ): CreateUserProfileDto {
         $userConfig = $this->getUserConfig(localUser: $localUser);
 
@@ -63,13 +69,28 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
             firstName: $localUser->getFirstName(),
             lastName: $localUser->getLastName(),
             realm: $userConfig->getRealm(),
+            attributes: $this->buildMappedAttributes(
+                localUser: $localUser,
+                userConfig: $userConfig,
+            ),
+        );
+    }
+
+    /**
+     * @param list<RoleDto> $availableRoles
+     */
+    #[Override]
+    public function prepareLocalUserRolesForKeycloakUserCreation(
+        KeycloakUserInterface $localUser,
+        array $availableRoles
+    ): UserRolesDto {
+        $userConfig = $this->getUserConfig(localUser: $localUser);
+
+        return new UserRolesDto(
+            realm: $userConfig->getRealm(),
             roles: $this->resolveRoles(
                 localRoleNames: $localUser->getRoles(),
                 availableRoles: $availableRoles,
-                userConfig: $userConfig,
-            ),
-            attributes: $this->buildMappedAttributes(
-                localUser: $localUser,
                 userConfig: $userConfig,
             ),
         );
@@ -99,42 +120,17 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
 
         return new DeleteUserDto(
             realm: $userConfig->getRealm(),
-            userId: Uuid::fromString($localUser->getId()),
+            userId: $this->resolveOptionalKeycloakUserId(localUser: $localUser),
+            localUserId: $localUser->getId(),
         );
     }
 
-    /**
-     * @param list<RoleDto> $availableRoles
-     */
     #[Override]
     public function prepareLocalUserDiffForKeycloakUserUpdate(
         KeycloakUserInterface $oldUserVersion,
-        KeycloakUserInterface $newUserVersion,
-        array $availableRoles
+        KeycloakUserInterface $newUserVersion
     ): UpdateUserDto {
-        $oldUserConfig = $this->getUserConfig(localUser: $oldUserVersion);
         $newUserConfig = $this->getUserConfig(localUser: $newUserVersion);
-
-        $oldRoles = $this->normalizeRoleNames(
-            roleNames: $this->projectRoleNames(
-                localRoleNames: $oldUserVersion->getRoles(),
-                userConfig: $oldUserConfig,
-            ),
-        );
-        $newRoles = $this->normalizeRoleNames(
-            roleNames: $this->projectRoleNames(
-                localRoleNames: $newUserVersion->getRoles(),
-                userConfig: $newUserConfig,
-            ),
-        );
-        $roles = $oldRoles === $newRoles
-            ? null
-            : $this->resolveRoles(
-                localRoleNames: $newUserVersion->getRoles(),
-                availableRoles: $availableRoles,
-                userConfig: $newUserConfig,
-            );
-
         $email = $oldUserVersion->getEmail() === $newUserVersion->getEmail()
             ? null
             : $newUserVersion->getEmail();
@@ -158,7 +154,6 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 ? null
                 : $newUserVersion->getFirstName(),
             lastName: $lastName,
-            roles: $roles,
             attributes: $this->buildMappedAttributes(
                 localUser: $newUserVersion,
                 userConfig: $newUserConfig,
@@ -167,8 +162,49 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
 
         return new UpdateUserDto(
             realm: $newUserConfig->getRealm(),
-            userId: Uuid::fromString($newUserVersion->getId()),
             profile: $profile,
+            userId: $this->resolveOptionalKeycloakUserIdForUpdate(
+                oldUserVersion: $oldUserVersion,
+                newUserVersion: $newUserVersion,
+            ),
+            localUserId: $newUserVersion->getId(),
+        );
+    }
+
+    /**
+     * @param list<RoleDto> $availableRoles
+     */
+    #[Override]
+    public function prepareLocalUserRolesForKeycloakUserUpdate(
+        KeycloakUserInterface $oldUserVersion,
+        KeycloakUserInterface $newUserVersion,
+        array $availableRoles
+    ): UserRolesDto {
+        $oldUserConfig = $this->getUserConfig(localUser: $oldUserVersion);
+        $newUserConfig = $this->getUserConfig(localUser: $newUserVersion);
+
+        $oldRoles = $this->normalizeRoleNames(
+            roleNames: $this->projectRoleNames(
+                localRoleNames: $oldUserVersion->getRoles(),
+                userConfig: $oldUserConfig,
+            ),
+        );
+        $newRoles = $this->normalizeRoleNames(
+            roleNames: $this->projectRoleNames(
+                localRoleNames: $newUserVersion->getRoles(),
+                userConfig: $newUserConfig,
+            ),
+        );
+
+        return new UserRolesDto(
+            realm: $newUserConfig->getRealm(),
+            roles: $oldRoles === $newRoles
+                ? null
+                : $this->resolveRoles(
+                    localRoleNames: $newUserVersion->getRoles(),
+                    availableRoles: $availableRoles,
+                    userConfig: $newUserConfig,
+                ),
         );
     }
 
@@ -203,7 +239,23 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 ),
             ) as $roleName
         ) {
-            $resolved[] = $availableByName[$roleName] ?? new RoleDto(name: $roleName);
+            $availableRole = $availableByName[$roleName] ?? null;
+            if ($availableRole instanceof RoleDto) {
+                $resolved[] = $availableRole;
+                continue;
+            }
+
+            if (!$userConfig->isRoleCreationAllowed()) {
+                throw new LogicException(
+                    sprintf(
+                        'Role "%s" is missing in Keycloak and role.allow_creation is disabled for "%s".',
+                        $roleName,
+                        $userConfig->getClassName(),
+                    )
+                );
+            }
+
+            $resolved[] = new RoleDto(name: $roleName);
         }
 
         return $resolved;
@@ -255,6 +307,24 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         }
 
         return array_keys($normalized);
+    }
+
+    private function resolveOptionalKeycloakUserId(KeycloakUserInterface $localUser): ?UuidInterface
+    {
+        $keycloakId = $localUser->getKeycloakId();
+        if ($keycloakId === null) {
+            return null;
+        }
+
+        return Uuid::fromString($keycloakId);
+    }
+
+    private function resolveOptionalKeycloakUserIdForUpdate(
+        KeycloakUserInterface $oldUserVersion,
+        KeycloakUserInterface $newUserVersion,
+    ): ?UuidInterface {
+        return $this->resolveOptionalKeycloakUserId(localUser: $newUserVersion)
+            ?? $this->resolveOptionalKeycloakUserId(localUser: $oldUserVersion);
     }
 
     private function getUserConfig(KeycloakUserInterface $localUser): UserEntityConfig

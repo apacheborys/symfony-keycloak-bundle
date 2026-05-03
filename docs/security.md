@@ -28,13 +28,13 @@ The authenticator does not use `preferred_username` as the canonical Symfony ide
 
 Instead it follows the bridge configuration model:
 
-- resolve the local identifier field from Doctrine metadata
-- find the `attributes_map` entry that corresponds to that field
+- start from the reserved identifier mapping behind `KeycloakUserInterface::getId()`
+- find the `attributes_map` entry with `property: 'id'`, or use the implicit default one
 - search the JWT payload for the claim names derived from that mapping
 
 That means:
 
-- with minimal config and Doctrine ID field `id`, the authenticator expects the `id` claim
+- with minimal config, the authenticator expects the `external_user_id` claim
 - if you rename the Keycloak attribute with `attribute_name`, that name becomes part of the search set
 - if you set `jwt_claim_name`, that explicit claim name is also supported
 

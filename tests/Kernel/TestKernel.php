@@ -12,12 +12,10 @@ use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
-use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Doctrine\TestManagerRegistry;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\Stub\NullPsr18Client;
-use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
@@ -123,15 +121,6 @@ final class TestKernel extends Kernel
         $services
             ->set('psr17.factory', Psr17Factory::class);
 
-        $services
-            ->set('doctrine', TestManagerRegistry::class)
-            ->args(arguments: [[
-                LocalUser::class => 'id',
-                CustomMappedUser::class => 'id',
-            ]]);
-
-        $services->alias(ManagerRegistry::class, 'doctrine');
-
         $container->extension(
             namespace: 'keycloak_bridge',
             config: [
@@ -151,15 +140,22 @@ final class TestKernel extends Kernel
                                 'property' => 'id',
                                 'attribute_name' => 'local-user-id',
                                 'create_if_missing' => true,
+                                'required' => [
+                                    'roles' => ['admin'],
+                                ],
                             ],
                             [
                                 'property' => 'firstName',
                                 'attribute_name' => 'profile-first-name',
                                 'create_if_missing' => true,
+                                'required' => false,
                             ],
                         ],
-                        'role_prefix' => 'payment.',
-                        'role_suffix' => '.svc',
+                        'role' => [
+                            'allow_creation' => true,
+                            'prefix' => 'payment.',
+                            'suffix' => '.svc',
+                        ],
                     ],
                     CustomMappedUser::class => [
                         'realm' => 'custom-realm',

@@ -17,14 +17,14 @@ In the happy path you configure only:
 
 Everything else can be inferred:
 
-- Doctrine resolves the local identifier field automatically
+- the bundle uses `KeycloakUserInterface::getId()` as the canonical local identifier automatically
 - the default mapper projects that identifier into Keycloak attributes
 - the same identifier is expected in JWT payload automatically
 - custom attribute mapping, role projection, and custom mappers stay opt-in
 
 ```mermaid
 flowchart LR
-    A[Doctrine User Entity] --> B[Symfony Keycloak Bridge Bundle]
+    A[Local User Object] --> B[Symfony Keycloak Bridge Bundle]
     B --> C[LocalEntityMapper]
     C --> D[apacheborys/keycloak-php-client]
     D --> E[Keycloak]
@@ -63,23 +63,28 @@ keycloak_bridge:
 
 That is enough to start:
 
-- `App\Entity\User` must be a Doctrine-managed entity
-- the bundle resolves its identifier field from Doctrine metadata
-- that identifier is automatically added to Keycloak attributes during user sync
-- the same identifier is expected in JWT payload after you bootstrap the Keycloak attribute once
+- `App\Entity\User` must implement `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
+- the bundle uses `KeycloakUserInterface::getId()` as the local-to-Keycloak reference value
+- that identifier is automatically added to Keycloak attributes during user sync under `external-user-id`
+- the same identifier is expected in JWT payload after you bootstrap the Keycloak attribute once under `external_user_id`
 
 This minimal setup assumes your container already provides:
 
-- `Doctrine\Persistence\ManagerRegistry`
 - a PSR-18 HTTP client
 - PSR-17 request and stream factories
+
+Important distinction:
+
+- `getId()` is used as the local-to-Keycloak reference attribute value
+- `getKeycloakId()` is used first for Keycloak-side update, delete, and lookup operations
+- if `getKeycloakId()` is `null`, the client falls back to the mapped local-id Keycloak attribute
 
 ## Start Here
 
 - [Quick Start](docs/quick-start.md)
   Full happy-path example with minimal config, one-time bootstrap through `KeycloakBootstrapper`, and create/update/delete calls.
 - [Configuration Guide](docs/configuration.md)
-  Required fields, optional fields, `attributes_map`, role prefix/suffix, custom mapper wiring, and automatic Doctrine behavior.
+  Required fields, optional fields, `attributes_map`, `required`, entity-level `role` settings, custom mapper wiring, and automatic identifier behavior.
 - [Security Guide](docs/security.md)
   `KeycloakJwtAuthenticator`, JWT identifier claim resolution, firewall setup, and role extraction.
 
@@ -101,6 +106,7 @@ You can autowire these interfaces directly:
 
 - The bundle does not mutate Keycloak realm configuration automatically during `createUser()`, `updateUser()`, or `loginUser()`.
 - Keycloak profile attribute bootstrap is an explicit application concern via `KeycloakBootstrapper`.
+- Use `ensureUserIdentifierAttribute()` for the minimal happy path, or `ensureConfiguredAttributes()` when you want the whole `attributes_map` to be synchronized explicitly.
 - The default mapper is intentionally conservative; if your app needs different login or projection rules, switch the entity to a custom mapper.
 
 ## Development
