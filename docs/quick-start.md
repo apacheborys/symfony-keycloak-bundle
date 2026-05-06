@@ -27,6 +27,7 @@ keycloak_bridge:
   client_realm: '%env(KEYCLOAK_CLIENT_REALM)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -43,12 +44,15 @@ The bundle fills the gap automatically:
 
 - `KeycloakUserInterface::getId()` is treated as the canonical local identifier
 - that identifier becomes the Keycloak attribute `external-user-id` automatically
-- the same identifier is expected in JWT payload automatically as `external_user_id`
+- the stored attribute value becomes `callsign.<local-id>`
+- the same callsigned identifier is expected in JWT payload automatically as `external_user_id`
+- `KeycloakJwtAuthenticator` strips the `callsign.` prefix before exposing the Symfony user identifier
 - the default mapper is used automatically
 
 This default does not depend on the PHP property name behind `getId()`.
 If your local identifier is backed by `$id`, `$uuid`, or anything else, the default Keycloak attribute name is still `external-user-id`.
 If you want the Keycloak attribute name to match your own convention, configure it explicitly in `attributes_map` with `property: 'id'`.
+The `callsign` itself should be unique per application that uses the same Keycloak setup.
 
 ```mermaid
 flowchart TD
@@ -94,6 +98,7 @@ Notes:
 - the bridge resolves realm, attribute name, display name, and JWT claim from bundle configuration
 - the bridge does not care how the identifier is stored internally as long as `getId()` returns the correct value
 - with minimal config, the bootstrapper creates `external-user-id` and exposes it as the JWT claim `external_user_id`
+- the actual value written into that Keycloak attribute and JWT claim is `callsign.<local-id>`
 - if you customized identifier mapping through `attributes_map` with `property: 'id'`, the bootstrapper uses that configuration too
 
 If you configured extra `attributes_map` entries with `create_if_missing`,
@@ -151,9 +156,9 @@ final readonly class KeycloakUserLifecycle
 The default bridge behavior here is:
 
 - `createUser()` resolves realm from `user_entities`
-- `createUser()` sends mapped attributes automatically, including the `getId()` identifier value
+- `createUser()` sends mapped attributes automatically, including the callsigned `getId()` identifier value
 - `updateUser()` computes the diff between old and new local user versions
-- `updateUser()` and `deleteUser()` use `getKeycloakId()` first and fall back to the mapped local-id Keycloak attribute when it is missing
+- `updateUser()` and `deleteUser()` use `getKeycloakId()` first and fall back to the callsigned local-id Keycloak attribute when it is missing
 
 ```mermaid
 sequenceDiagram

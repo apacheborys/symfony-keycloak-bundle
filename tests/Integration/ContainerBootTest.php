@@ -101,8 +101,8 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('users-realm', $dto->getRealm());
         self::assertSame(
             [
-                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
-                'profile-first-name' => ['Local'],
+                'local-user-id' => ['bridge.58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['bridge.Local'],
             ],
             $dto->getAttributes()
         );
@@ -111,11 +111,11 @@ final class ContainerBootTest extends KernelTestCase
             $user,
             [
                 new RoleDto(
-                    name: 'payment.ROLE_USER.svc',
+                    name: 'bridge.payment.ROLE_USER.svc',
                     id: Uuid::fromString('a7d9fd61-1f20-4d69-9f8f-af72784b9a02')
                 ),
                 new RoleDto(
-                    name: 'payment.ROLE_ADMIN.svc',
+                    name: 'bridge.payment.ROLE_ADMIN.svc',
                     id: Uuid::fromString('7ae8eba6-f101-45a5-9f9e-a77032410cc5')
                 ),
             ]
@@ -124,11 +124,11 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('users-realm', $rolesDto->getRealm());
         self::assertNotNull($rolesDto->getRoles());
         self::assertCount(2, $rolesDto->getRoles());
-        self::assertSame('payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
-        self::assertSame('payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
+        self::assertSame('bridge.payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
+        self::assertSame('bridge.payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
     }
 
-    public function testMapperReturnsConfiguredLocalUserIdAttributeName(): void
+    public function testMapperReturnsConfiguredLocalUserIdAttribute(): void
     {
         self::bootKernel();
 
@@ -138,7 +138,10 @@ final class ContainerBootTest extends KernelTestCase
          */
         $mapper = $container->get(LocalEntityMapper::class);
 
-        self::assertSame('local-user-id', $mapper->getLocalUserIdAttributeName(new LocalUser()));
+        $attribute = $mapper->getLocalUserIdAttribute(new LocalUser());
+
+        self::assertSame('local-user-id', $attribute->getAttributeName());
+        self::assertSame(['bridge.58f5b67f-bcf4-4d12-86a3-a54f7704f326'], $attribute->getNormalizedValues());
     }
 
     public function testCustomMapperConfigurationOverridesDefaultMapperSupport(): void
@@ -300,8 +303,8 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('after@example.test', $dto->getProfile()->getEmail());
         self::assertSame(
             [
-                'local-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
-                'profile-first-name' => ['After'],
+                'local-user-id' => ['bridge.58f5b67f-bcf4-4d12-86a3-a54f7704f326'],
+                'profile-first-name' => ['bridge.After'],
             ],
             $dto->getProfile()->getAttributes()
         );
@@ -311,11 +314,11 @@ final class ContainerBootTest extends KernelTestCase
             newUserVersion: $newUser,
             availableRoles: [
                 new RoleDto(
-                    name: 'payment.ROLE_USER.svc',
+                    name: 'bridge.payment.ROLE_USER.svc',
                     id: Uuid::fromString('ebec7392-12ea-4d6a-b55a-6d17644f17c2')
                 ),
                 new RoleDto(
-                    name: 'payment.ROLE_ADMIN.svc',
+                    name: 'bridge.payment.ROLE_ADMIN.svc',
                     id: Uuid::fromString('2af3f4de-0251-4be3-9f33-ce4f3ce69a01')
                 ),
             ],
@@ -324,7 +327,7 @@ final class ContainerBootTest extends KernelTestCase
         self::assertSame('users-realm', $rolesDto->getRealm());
         self::assertNotNull($rolesDto->getRoles());
         self::assertCount(2, $rolesDto->getRoles());
-        self::assertSame('payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
-        self::assertSame('payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
+        self::assertSame('bridge.payment.ROLE_USER.svc', $rolesDto->getRoles()[0]->getName());
+        self::assertSame('bridge.payment.ROLE_ADMIN.svc', $rolesDto->getRoles()[1]->getName());
     }
 }

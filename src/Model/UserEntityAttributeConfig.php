@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Model;
 
-use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Realm\UserProfile\EnsureUserIdentifierAttributeDto;
 use Apacheborys\KeycloakPhpClient\DTO\Response\Realm\UserProfile\AttributeRequiredDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use BackedEnum;

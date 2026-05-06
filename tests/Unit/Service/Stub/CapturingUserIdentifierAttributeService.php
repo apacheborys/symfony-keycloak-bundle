@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Service\Stub;
 
-use Apacheborys\KeycloakPhpClient\DTO\Request\EnsureUserIdentifierAttributeDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Realm\UserProfile\EnsureUserIdentifierAttributeDto;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeServiceInterface;
 
 final class CapturingUserIdentifierAttributeService implements KeycloakUserIdentifierAttributeServiceInterface

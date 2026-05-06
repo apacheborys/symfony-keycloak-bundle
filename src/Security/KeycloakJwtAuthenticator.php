@@ -8,6 +8,7 @@ use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Override;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -36,6 +37,7 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         private readonly KeycloakJwtVerificationServiceInterface $jwtVerificationService,
         private readonly KeycloakClientConfig $keycloakClientConfig,
         iterable $userEntityConfigs,
+        private readonly CallsignValuePrefixer $callsignValuePrefixer,
     ) {
         $configuredIdentifierClaimNames = [];
         foreach ($userEntityConfigs as $userEntityConfig) {
@@ -164,7 +166,10 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
             if (is_string($claimValue)) {
                 $normalizedClaimValue = trim($claimValue);
                 if ($normalizedClaimValue !== '') {
-                    return $normalizedClaimValue;
+                    $strippedClaimValue = trim($this->callsignValuePrefixer->strip($normalizedClaimValue));
+                    if ($strippedClaimValue !== '') {
+                        return $strippedClaimValue;
+                    }
                 }
 
                 continue;
