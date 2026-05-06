@@ -5,15 +5,17 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Mapper;
 
 use Apacheborys\KeycloakPhpClient\DTO\RoleDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\CreateUserProfileDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\DeleteUserDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\OidcTokenRequestDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserProfileDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UserRolesDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Oidc\OidcTokenRequestDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Role\UserRolesDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\AttributeValueDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\CreateUserProfileDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\DeleteUserDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\UpdateUserDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\UpdateUserProfileDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use LogicException;
 use Override;
 use Ramsey\Uuid\Uuid;
@@ -31,6 +33,7 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         iterable $userEntityConfigs,
         private string $clientId,
         private string $clientSecret,
+        private CallsignValuePrefixer $callsignValuePrefixer,
     ) {
         $configs = [];
 
@@ -48,11 +51,17 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
     }
 
     #[Override]
-    public function getLocalUserIdAttributeName(KeycloakUserInterface $localUser): string
+    public function getLocalUserIdAttribute(KeycloakUserInterface $localUser): AttributeValueDto
     {
-        return $this->getUserConfig(localUser: $localUser)
-            ->getUserIdentifierAttributeConfig()
-            ->getAttributeName();
+        $userConfig = $this->getUserConfig(localUser: $localUser);
+        $identifierAttributeConfig = $userConfig->getUserIdentifierAttributeConfig();
+
+        return new AttributeValueDto(
+            attributeName: $identifierAttributeConfig->getAttributeName(),
+            attributeValue: $this->callsignValuePrefixer->prefix(
+                $identifierAttributeConfig->resolveValue($localUser)
+            ),
+        );
     }
 
     #[Override]
@@ -268,7 +277,9 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
         KeycloakUserInterface $localUser,
         UserEntityConfig $userConfig
     ): array {
-        return $userConfig->resolveMappedAttributes(localUser: $localUser);
+        return $this->callsignValuePrefixer->prefixAttributeMap(
+            $userConfig->resolveMappedAttributes(localUser: $localUser),
+        );
     }
 
     /**
@@ -284,7 +295,9 @@ final readonly class LocalEntityMapper implements LocalKeycloakUserBridgeMapperI
                 continue;
             }
 
-            $projected[] = $userConfig->getRolePrefix() . $trimmedRoleName . $userConfig->getRoleSuffix();
+            $projected[] = $this->callsignValuePrefixer->prefix(
+                $userConfig->getRolePrefix() . $trimmedRoleName . $userConfig->getRoleSuffix()
+            );
         }
 
         return $projected;

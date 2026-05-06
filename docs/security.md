@@ -37,6 +37,8 @@ That means:
 - with minimal config, the authenticator expects the `external_user_id` claim
 - if you rename the Keycloak attribute with `attribute_name`, that name becomes part of the search set
 - if you set `jwt_claim_name`, that explicit claim name is also supported
+- the identifier claim value itself is expected to be callsigned, for example `billing.58f5b67f-bcf4-4d12-86a3-a54f7704f326`
+- the authenticator strips the leading `callsign.` prefix before building `KeycloakJwtUser`
 
 ## Why This Matters
 
@@ -45,8 +47,8 @@ This keeps Symfony and Keycloak aligned around the same local user reference.
 Typical result:
 
 - Symfony knows the user as local ID `58f5b67f-bcf4-4d12-86a3-a54f7704f326`
-- Keycloak stores the same value as a user attribute
-- JWT payload contains the same value as a claim
+- Keycloak stores `callsign.58f5b67f-bcf4-4d12-86a3-a54f7704f326` as a user attribute
+- JWT payload contains the same callsigned value as a claim
 - the authenticator turns that value into `KeycloakJwtUser::getUserIdentifier()`
 
 The recommended way to prepare that claim in Keycloak is:
@@ -63,6 +65,8 @@ The authenticator merges roles from:
 If the token contains no roles at all, it falls back to:
 
 - `ROLE_USER`
+
+The authenticator keeps role names exactly as they come from Keycloak. If your bridge config uses both `callsign` and entity-level role prefix/suffix, Symfony receives those final Keycloak role names unchanged, for example `billing.payment.ROLE_USER.svc`.
 
 ## Request Flow
 

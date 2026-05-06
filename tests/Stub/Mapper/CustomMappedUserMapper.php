@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper;
 
 use Apacheborys\KeycloakPhpClient\DTO\RoleDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\CreateUserProfileDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\DeleteUserDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\OidcTokenRequestDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UpdateUserProfileDto;
-use Apacheborys\KeycloakPhpClient\DTO\Request\UserRolesDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Oidc\OidcTokenRequestDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\Role\UserRolesDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\AttributeValueDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\CreateUserProfileDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\DeleteUserDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\UpdateUserDto;
+use Apacheborys\KeycloakPhpClient\DTO\Request\User\UpdateUserProfileDto;
 use Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface;
 use Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
@@ -26,9 +27,12 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
     }
 
     #[Override]
-    public function getLocalUserIdAttributeName(KeycloakUserInterface $localUser): string
+    public function getLocalUserIdAttribute(KeycloakUserInterface $localUser): AttributeValueDto
     {
-        return self::DEFAULT_LOCAL_USER_ID_ATTRIBUTE_NAME;
+        return new AttributeValueDto(
+            attributeName: self::DEFAULT_LOCAL_USER_ID_ATTRIBUTE_NAME,
+            attributeValue: (string) $localUser->getId(),
+        );
     }
 
     #[Override]
@@ -43,9 +47,7 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
             firstName: $localUser->getFirstName(),
             lastName: $localUser->getLastName(),
             realm: $this->getRealm($localUser),
-            attributes: [
-                $this->getLocalUserIdAttributeName($localUser) => (string) $localUser->getId(),
-            ],
+            attributes: [$this->getLocalUserIdAttribute($localUser)],
         );
     }
 
@@ -108,9 +110,7 @@ final class CustomMappedUserMapper implements LocalKeycloakUserBridgeMapperInter
                 enabled: $newUserVersion->isEnabled(),
                 firstName: $newUserVersion->getFirstName(),
                 lastName: $newUserVersion->getLastName(),
-                attributes: [
-                    $this->getLocalUserIdAttributeName($newUserVersion) => (string) $newUserVersion->getId(),
-                ],
+                attributes: [$this->getLocalUserIdAttribute($newUserVersion)],
             ),
             userId: $keycloakId !== null ? Uuid::fromString($keycloakId) : null,
             localUserId: $newUserVersion->getId(),

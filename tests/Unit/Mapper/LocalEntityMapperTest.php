@@ -7,13 +7,14 @@ namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Mapper;
 use Apacheborys\KeycloakPhpClient\DTO\RoleDto;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use LogicException;
 use PHPUnit\Framework\TestCase;
 
 final class LocalEntityMapperTest extends TestCase
 {
-    public function testPrepareLocalUserRolesForKeycloakUserCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
+    public function testPrepareLocalUserRolesForCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
     {
         $mapper = new LocalEntityMapper(
             userEntityConfigs: [
@@ -27,6 +28,7 @@ final class LocalEntityMapperTest extends TestCase
             ],
             clientId: 'bridge-client',
             clientSecret: 'bridge-secret',
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
 
         $dto = $mapper->prepareLocalUserRolesForKeycloakUserCreation(
@@ -36,7 +38,7 @@ final class LocalEntityMapperTest extends TestCase
 
         self::assertNotNull($dto->getRoles());
         self::assertCount(1, $dto->getRoles());
-        self::assertSame('payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
+        self::assertSame('bridge.payment.ROLE_USER.svc', $dto->getRoles()[0]->getName());
         self::assertNull($dto->getRoles()[0]->getId());
     }
 
@@ -54,6 +56,7 @@ final class LocalEntityMapperTest extends TestCase
             ],
             clientId: 'bridge-client',
             clientSecret: 'bridge-secret',
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
 
         $this->expectException(LogicException::class);
@@ -67,7 +70,7 @@ final class LocalEntityMapperTest extends TestCase
 
     public function testPrepareLocalUserRolesForKeycloakUserCreationUsesExistingRoleWhenAvailable(): void
     {
-        $existingRole = new RoleDto(name: 'payment.ROLE_USER.svc');
+        $existingRole = new RoleDto(name: 'bridge.payment.ROLE_USER.svc');
         $mapper = new LocalEntityMapper(
             userEntityConfigs: [
                 new UserEntityConfig(
@@ -80,6 +83,7 @@ final class LocalEntityMapperTest extends TestCase
             ],
             clientId: 'bridge-client',
             clientSecret: 'bridge-secret',
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
 
         $dto = $mapper->prepareLocalUserRolesForKeycloakUserCreation(
@@ -102,6 +106,7 @@ final class LocalEntityMapperTest extends TestCase
             ],
             clientId: 'bridge-client',
             clientSecret: 'bridge-secret',
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
 
         $user = new LocalUser(keycloakId: null);
@@ -122,14 +127,18 @@ final class LocalEntityMapperTest extends TestCase
             ],
             clientId: 'bridge-client',
             clientSecret: 'bridge-secret',
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
 
         $user = new LocalUser();
         $dto = $mapper->prepareLocalUserForKeycloakUserCreation($user);
 
-        self::assertSame('external-user-id', $mapper->getLocalUserIdAttributeName($user));
+        $localUserIdAttribute = $mapper->getLocalUserIdAttribute($user);
+
+        self::assertSame('external-user-id', $localUserIdAttribute->getAttributeName());
+        self::assertSame(['bridge.58f5b67f-bcf4-4d12-86a3-a54f7704f326'], $localUserIdAttribute->getNormalizedValues());
         self::assertSame(
-            ['external-user-id' => ['58f5b67f-bcf4-4d12-86a3-a54f7704f326']],
+            ['external-user-id' => ['bridge.58f5b67f-bcf4-4d12-86a3-a54f7704f326']],
             $dto->getAttributes(),
         );
     }
