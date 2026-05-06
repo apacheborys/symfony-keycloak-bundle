@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 
 final class LocalEntityMapperTest extends TestCase
 {
-    public function testPrepareLocalUserRolesForKeycloakUserCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
+    public function testPrepareLocalUserRolesForCreationReturnsPlaceholderRoleWhenAutoCreationIsEnabled(): void
     {
         $mapper = new LocalEntityMapper(
             userEntityConfigs: [

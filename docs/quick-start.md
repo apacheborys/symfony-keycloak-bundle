@@ -56,10 +56,10 @@ The `callsign` itself should be unique per application that uses the same Keyclo
 
 ```mermaid
 flowchart TD
-    A[Minimal keycloak_bridge config] --> B[Bundle uses KeycloakUserInterface::getId()]
-    B --> C[Bridge builds UserEntityConfig]
-    C --> D[LocalEntityMapper projects identifier into Keycloak attributes]
-    C --> E[KeycloakJwtAuthenticator expects the same claim in JWT]
+    A["Minimal keycloak_bridge config"] --> B["Bundle uses getId() as the local identifier"]
+    B --> C["Bridge builds UserEntityConfig"]
+    C --> D["LocalEntityMapper projects the identifier into Keycloak attributes"]
+    C --> E["KeycloakJwtAuthenticator expects the same claim in JWT"]
 ```
 
 ## 2. Bootstrap the Identifier Attribute in Keycloak

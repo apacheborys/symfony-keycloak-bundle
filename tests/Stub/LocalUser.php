@@ -73,6 +73,7 @@ final readonly class LocalUser implements KeycloakUserInterface
         return $this->localIdentifier;
     }
 
+    #[\Override]
     public function getId(): string
     {
         return $this->id;
