@@ -72,6 +72,15 @@ Behavior:
 - `false` is useful when you want every authentication failure to look identical to clients
 - this option affects only the HTTP status code returned by `KeycloakJwtAuthenticator`
 - logging behavior is unchanged; typed Keycloak failures still log sanitized diagnostic context when `logger_service` is configured
+- invalid or malformed JWT input still returns `401` in both modes
+- the response body remains the same safe JSON shape in both modes:
+
+```json
+{
+  "message": "Authentication failed.",
+  "reason": "keycloak_unavailable"
+}
+```
 
 ## `user_entities`
 
