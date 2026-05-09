@@ -99,7 +99,26 @@ Authentication fails when:
 - signature validation fails
 - the configured local identifier claim is missing from the payload
 
-The authenticator responds with `401 Unauthorized`.
+By default the authenticator responds with:
+
+- `401 Unauthorized` for invalid token input
+- `429 Too Many Requests` when Keycloak or JWKS lookup is rate limited
+- `502 Bad Gateway` when Keycloak returns an invalid response
+- `503 Service Unavailable` when Keycloak is temporarily unavailable
+
+If you want to hide infrastructure state from clients, configure:
+
+```yaml
+keycloak_bridge:
+  security:
+    expose_infrastructure_failure_status: false
+```
+
+With that setting:
+
+- the response status is always `401 Unauthorized`
+- the response body still contains a safe internal reason code
+- typed Keycloak failures still log sanitized diagnostic context when a logger is configured
 
 ## Typical Extension Point
 

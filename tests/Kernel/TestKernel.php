@@ -31,6 +31,14 @@ final class TestKernel extends Kernel
 {
     use MicroKernelTrait;
 
+    public function __construct(
+        string $environment,
+        bool $debug,
+        private readonly bool $exposeInfrastructureFailureStatus = true,
+    ) {
+        parent::__construct($environment, $debug);
+    }
+
     #[Override]
     public function registerBundles(): iterable
     {
@@ -139,6 +147,9 @@ final class TestKernel extends Kernel
                 'stream_factory_service' => 'psr17.factory',
                 'logger_service' => 'test.logger',
                 'realm_list_ttl' => 30,
+                'security' => [
+                    'expose_infrastructure_failure_status' => $this->exposeInfrastructureFailureStatus,
+                ],
                 'user_entities' => [
                     LocalUser::class => [
                         'realm' => 'users-realm',

@@ -48,6 +48,7 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         private readonly KeycloakClientConfig $keycloakClientConfig,
         iterable $userEntityConfigs,
         private readonly CallsignValuePrefixer $callsignValuePrefixer,
+        private readonly bool $exposeInfrastructureFailureStatus = true,
         private readonly ?LoggerInterface $logger = null,
     ) {
         $configuredIdentifierClaimNames = [];
@@ -155,7 +156,11 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
         $statusCode = $exception instanceof KeycloakJwtAuthenticationException
-            ? $exception->getStatusCode()
+            ? (
+                $this->exposeInfrastructureFailureStatus
+                    ? $exception->getStatusCode()
+                    : Response::HTTP_UNAUTHORIZED
+            )
             : Response::HTTP_UNAUTHORIZED;
         $reason = $exception instanceof KeycloakJwtAuthenticationException
             ? $exception->getReasonCode()

@@ -62,7 +62,11 @@ final class ContainerBootTest extends KernelTestCase
     #[Override]
     protected static function createKernel(array $options = []): TestKernel
     {
-        return new TestKernel('test', true);
+        return new TestKernel(
+            'test',
+            true,
+            (bool) ($options['expose_infrastructure_failure_status'] ?? true),
+        );
     }
 
     public function testContainerProvidesKeycloakService(): void
@@ -96,6 +100,17 @@ final class ContainerBootTest extends KernelTestCase
 
         self::assertInstanceOf(InMemoryLogger::class, $logger);
         self::assertSame($container->get('test.logger'), $logger);
+    }
+
+    public function testContainerDefaultsToExposingInfrastructureFailureStatus(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        $authenticator = $container->get(KeycloakJwtAuthenticator::class);
+        $reflectionProperty = new \ReflectionProperty($authenticator, 'exposeInfrastructureFailureStatus');
+
+        self::assertTrue($reflectionProperty->getValue($authenticator));
     }
 
     public function testUserEntityRealmMapping(): void

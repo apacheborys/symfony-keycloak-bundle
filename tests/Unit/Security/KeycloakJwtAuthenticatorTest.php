@@ -381,10 +381,63 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         self::assertStringNotContainsString('sensitive response body', $serializedRecord);
     }
 
+    public function testOnAuthenticationFailureCanHideInfrastructureFailureStatusWhileKeepingReasonAndLogs(): void
+    {
+        $logger = new InMemoryLogger();
+        $rawJwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
+        );
+        $authenticator = $this->createAuthenticator(
+            verificationResult: new KeycloakServerException(
+                new KeycloakErrorContext(
+                    method: 'GET',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret&foo=bar',
+                    statusCode: 503,
+                    responseBody: 'sensitive response body',
+                    keycloakError: 'Bearer ' . $rawJwt,
+                    keycloakErrorDescription: 'Authorization: Bearer ' . $rawJwt,
+                    correlationId: 'access_token=secret refresh_token=secret client_secret=secret password=secret',
+                ),
+            ),
+            baseUrl: 'https://example.test',
+            logger: $logger,
+            exposeInfrastructureFailureStatus: false,
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $rawJwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        $exception = self::catchAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+        );
+        $response = $authenticator->onAuthenticationFailure($request, $exception);
+
+        self::assertNotNull($response);
+        self::assertSame(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
+        self::assertSame(
+            [
+                'message' => 'Authentication failed.',
+                'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE,
+            ],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
+        self::assertCount(1, $logger->records);
+        self::assertSame(LogLevel::ERROR, $logger->records[0]['level']);
+        self::assertSame('GET', $logger->records[0]['context']['method']);
+        self::assertSame(
+            'https://example.test/protocol/openid-connect/certs?client_secret=[redacted]&foo=bar',
+            $logger->records[0]['context']['uri'],
+        );
+        self::assertSame(503, $logger->records[0]['context']['status_code']);
+    }
+
     private function createAuthenticator(
         bool|\Throwable $verificationResult,
         string $baseUrl,
         ?LoggerInterface $logger = null,
+        bool $exposeInfrastructureFailureStatus = true,
     ): KeycloakJwtAuthenticator {
         return new KeycloakJwtAuthenticator(
             jwtVerificationService: new class ($verificationResult) implements KeycloakJwtVerificationServiceInterface {
@@ -424,6 +477,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
                 ),
             ],
             callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
+            exposeInfrastructureFailureStatus: $exposeInfrastructureFailureStatus,
             logger: $logger,
         );
     }

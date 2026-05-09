@@ -55,6 +55,12 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ->scalarNode('cache_pool')->defaultNull()->end()
                 ->scalarNode('logger_service')->defaultNull()->end()
                 ->integerNode('realm_list_ttl')->min(0)->defaultValue(3600)->end()
+                ->arrayNode('security')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('expose_infrastructure_failure_status')->defaultTrue()->end()
+                    ->end()
+                ->end()
                 ->arrayNode('user_entities')
                     ->useAttributeAsKey('class')
                     ->arrayPrototype()
@@ -102,6 +108,9 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  cache_pool: string|null,
      *  logger_service: string|null,
      *  realm_list_ttl: int,
+     *  security: array{
+     *      expose_infrastructure_failure_status: bool
+     *  },
      *  user_entities: array<string, array{
      *      realm: string,
      *      attributes_map: list<array{
@@ -208,6 +217,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     service(serviceId: KeycloakClientConfig::class),
                     tagged_iterator(tag: 'keycloak.user_entity_config'),
                     service(serviceId: CallsignValuePrefixer::class),
+                    $config['security']['expose_infrastructure_failure_status'],
                     $loggerRef,
                 ]
             );
