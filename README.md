@@ -94,6 +94,41 @@ Important distinction:
 - [Security Guide](docs/security.md)
   `KeycloakJwtAuthenticator`, JWT identifier claim resolution, firewall setup, and role extraction.
 
+## Authentication Failure Handling
+
+`KeycloakJwtAuthenticator` catches the typed exception model provided by
+`apacheborys/keycloak-php-client` during JWT verification.
+
+Behavior summary:
+
+- malformed or otherwise invalid JWT input still returns `401 Unauthorized`
+- typed Keycloak or JWKS infrastructure failures are converted into controlled JSON responses
+- by default those failures keep their mapped operational status codes:
+  `429` for rate limiting, `502` for invalid Keycloak responses, and `503` for temporary
+  upstream unavailability
+- if you set `keycloak_bridge.security.expose_infrastructure_failure_status: false`, the
+  authenticator always responds with `401` instead
+
+The response body is intentionally minimal and safe:
+
+```json
+{
+  "message": "Authentication failed.",
+  "reason": "keycloak_unavailable"
+}
+```
+
+Security guarantees:
+
+- raw JWT values are never returned to clients
+- the `Authorization` header is never returned to clients
+- `client_secret`, `access_token`, `refresh_token`, and `password` values are never returned
+- raw Keycloak response bodies are not exposed to end users
+
+If `logger_service` is configured, the authenticator logs sanitized diagnostic context from
+`KeycloakErrorContext`, including HTTP method, sanitized URI, status code, sanitized Keycloak
+error fields, correlation id, and exception class.
+
 ## Services
 
 You can autowire these interfaces directly:

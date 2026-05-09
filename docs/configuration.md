@@ -46,8 +46,41 @@ When you keep configuration minimal, the bridge still does real work for you:
 | `cache_pool` | no | PSR-6 cache pool service ID |
 | `logger_service` | no | PSR-3 logger service ID |
 | `realm_list_ttl` | no | Cache TTL for realm listing |
+| `security.expose_infrastructure_failure_status` | no | Keep operational `429`/`502`/`503` statuses from authenticator failures instead of collapsing them to `401` |
 
 If you omit the service IDs, the bundle relies on container aliases for the related PSR interfaces.
+
+## `security`
+
+Use the `security` block for the authenticator's failure-response policy.
+
+```yaml
+keycloak_bridge:
+  security:
+    expose_infrastructure_failure_status: true
+```
+
+Options:
+
+| Option | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `expose_infrastructure_failure_status` | no | `true` | When `true`, authentication failures caused by Keycloak rate limiting, invalid upstream responses, or temporary unavailability keep their mapped HTTP statuses. When `false`, the authenticator always returns `401` while still returning a safe reason code and still logging the real upstream context. |
+
+Behavior:
+
+- `true` is the operationally precise default
+- `false` is useful when you want every authentication failure to look identical to clients
+- this option affects only the HTTP status code returned by `KeycloakJwtAuthenticator`
+- logging behavior is unchanged; typed Keycloak failures still log sanitized diagnostic context when `logger_service` is configured
+- invalid or malformed JWT input still returns `401` in both modes
+- the response body remains the same safe JSON shape in both modes:
+
+```json
+{
+  "message": "Authentication failed.",
+  "reason": "keycloak_unavailable"
+}
+```
 
 ## `user_entities`
 

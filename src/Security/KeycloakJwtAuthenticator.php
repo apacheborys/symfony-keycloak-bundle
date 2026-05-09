@@ -5,17 +5,25 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Security;
 
 use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthenticationException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthorizationException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakInvalidResponseException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakRateLimitException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakServerException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakTransportException;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Security\Exception\KeycloakJwtAuthenticationException;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Override;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
-use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
@@ -24,6 +32,8 @@ use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface
 
 final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
+    private const string FALLBACK_REASON = 'authentication_failed';
+    private const string KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE = 'Keycloak JWT verification failed.';
     private const string REQUEST_ATTRIBUTE_RAW_JWT = '_keycloak_bridge.jwt.raw';
     private const string REQUEST_ATTRIBUTE_PARSED_JWT = '_keycloak_bridge.jwt.parsed';
 
@@ -38,6 +48,8 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         private readonly KeycloakClientConfig $keycloakClientConfig,
         iterable $userEntityConfigs,
         private readonly CallsignValuePrefixer $callsignValuePrefixer,
+        private readonly bool $exposeInfrastructureFailureStatus = true,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         $configuredIdentifierClaimNames = [];
         foreach ($userEntityConfigs as $userEntityConfig) {
@@ -57,17 +69,14 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
             return false;
         }
 
+        $request->attributes->set(self::REQUEST_ATTRIBUTE_RAW_JWT, $rawJwt);
+
         try {
             $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
         } catch (\Throwable) {
-            return false;
+            return true;
         }
 
-        if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
-            return false;
-        }
-
-        $request->attributes->set(self::REQUEST_ATTRIBUTE_RAW_JWT, $rawJwt);
         $request->attributes->set(self::REQUEST_ATTRIBUTE_PARSED_JWT, $jwt);
 
         return true;
@@ -82,31 +91,45 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         }
 
         if (!is_string($rawJwt) || $rawJwt === '') {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT bearer token was not provided.');
+            throw KeycloakJwtAuthenticationException::tokenNotProvided();
         }
 
         $jwt = $request->attributes->get(self::REQUEST_ATTRIBUTE_PARSED_JWT);
         if (!$jwt instanceof JsonWebToken) {
             try {
                 $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
-            } catch (\Throwable) {
-                throw new CustomUserMessageAuthenticationException(message: 'Malformed JWT token.');
+            } catch (\Throwable $exception) {
+                throw KeycloakJwtAuthenticationException::malformedToken(previous: $exception);
             }
         }
 
         if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT issuer is not supported.');
+            throw KeycloakJwtAuthenticationException::unsupportedIssuer();
         }
 
-        if (!$this->jwtVerificationService->verifyJwt(jwt: $rawJwt)) {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT signature validation failed.');
+        try {
+            $verificationResult = $this->jwtVerificationService->verifyJwt(jwt: $rawJwt);
+        } catch (
+            KeycloakRateLimitException
+            | KeycloakServerException
+            | KeycloakTransportException
+            | KeycloakInvalidResponseException
+            | KeycloakAuthenticationException
+            | KeycloakAuthorizationException
+            | KeycloakException $exception
+        ) {
+            $this->logKeycloakVerificationFailure($exception);
+
+            throw KeycloakJwtAuthenticationException::fromKeycloakException($exception);
+        }
+
+        if (!$verificationResult) {
+            throw KeycloakJwtAuthenticationException::signatureValidationFailed();
         }
 
         $userIdentifier = $this->resolveUserIdentifier(jwt: $jwt);
         if ($userIdentifier === null) {
-            throw new CustomUserMessageAuthenticationException(
-                message: 'Configured JWT user identifier attribute is missing.'
-            );
+            throw KeycloakJwtAuthenticationException::identifierClaimMissing();
         }
 
         $roles = $this->extractRoles(jwt: $jwt);
@@ -132,12 +155,23 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
     #[Override]
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
+        $statusCode = $exception instanceof KeycloakJwtAuthenticationException
+            ? (
+                $this->exposeInfrastructureFailureStatus
+                    ? $exception->getStatusCode()
+                    : Response::HTTP_UNAUTHORIZED
+            )
+            : Response::HTTP_UNAUTHORIZED;
+        $reason = $exception instanceof KeycloakJwtAuthenticationException
+            ? $exception->getReasonCode()
+            : self::FALLBACK_REASON;
+
         return new JsonResponse(
             data: [
                 'message' => 'Authentication failed.',
-                'reason' => $exception->getMessageKey(),
+                'reason' => $reason,
             ],
-            status: Response::HTTP_UNAUTHORIZED,
+            status: $statusCode,
         );
     }
 
@@ -302,5 +336,62 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         }
 
         return $token;
+    }
+
+    private function logKeycloakVerificationFailure(KeycloakException $exception): void
+    {
+        if ($this->logger === null) {
+            return;
+        }
+
+        $context = $exception->getContext();
+        $logContext = [
+            'method' => $context->getMethod(),
+            'uri' => $context->getUri(),
+            'status_code' => $context->getStatusCode(),
+            'keycloak_error' => self::sanitizeLogValue($context->getKeycloakError()),
+            'keycloak_error_description' => self::sanitizeLogValue($context->getKeycloakErrorDescription()),
+            'correlation_id' => self::sanitizeLogValue($context->getCorrelationId()),
+            'exception_class' => $exception::class,
+        ];
+
+        if (
+            $exception instanceof KeycloakAuthenticationException
+            || $exception instanceof KeycloakAuthorizationException
+            || $exception instanceof KeycloakRateLimitException
+        ) {
+            $this->logger->warning(self::KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE, $logContext);
+
+            return;
+        }
+
+        $this->logger->error(self::KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE, $logContext);
+    }
+
+    private static function sanitizeLogValue(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        $sanitizedValue = $value;
+        $patterns = [
+            '/Authorization\s*:\s*Bearer\s+\S+/i' => '[redacted credentials]',
+            '/\bBearer\s+\S+/i' => '[redacted credentials]',
+            '/\b(client_secret|refresh_token|access_token|password)\b\s*[:=]\s*\S+/i' => '$1=[redacted]',
+            '/\b[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\b/' => '[redacted jwt]',
+            '/\bAuthorization\b/i' => 'redacted',
+            '/\bBearer\b/i' => 'redacted',
+            '/\bclient_secret\b/i' => 'redacted',
+            '/\brefresh_token\b/i' => 'redacted',
+            '/\baccess_token\b/i' => 'redacted',
+            '/\bpassword\b/i' => 'redacted',
+        ];
+
+        foreach ($patterns as $pattern => $replacement) {
+            $sanitizedValue = (string) preg_replace($pattern, $replacement, $sanitizedValue);
+        }
+
+        return $sanitizedValue;
     }
 }

@@ -10,6 +10,10 @@ Its job is intentionally narrow:
 - resolve the Symfony user identifier from the configured local identifier claim
 - project Keycloak realm and resource roles into Symfony roles
 
+During `verifyJwt(...)` it also catches the typed exception model exposed by
+`apacheborys/keycloak-php-client` and translates those failures into controlled Symfony
+authentication failures instead of letting them bubble into a `500`.
+
 ## Firewall Setup
 
 ```yaml
@@ -83,10 +87,19 @@ sequenceDiagram
     Auth->>JWT: parse token
     Auth->>Auth: validate issuer against base_url
     Auth->>Verify: verifyJwt(rawJwt)
-    Verify-->>Auth: valid / invalid
-    Auth->>JWT: read configured identifier claim
-    Auth->>JWT: collect realm/resource roles
-    Auth-->>User: build KeycloakJwtUser
+    alt verification returns valid
+        Verify-->>Auth: valid
+        Auth->>JWT: read configured identifier claim
+        Auth->>JWT: collect realm/resource roles
+        Auth-->>User: build KeycloakJwtUser
+    else verification returns invalid
+        Verify-->>Auth: false
+        Auth-->>Request: 401 safe authentication failure
+    else verification throws typed KeycloakException
+        Verify-->>Auth: KeycloakException
+        Auth->>Auth: map to KeycloakJwtAuthenticationException
+        Auth-->>Request: safe JSON authentication failure
+    end
 ```
 
 ## Failure Cases
@@ -99,7 +112,80 @@ Authentication fails when:
 - signature validation fails
 - the configured local identifier claim is missing from the payload
 
-The authenticator responds with `401 Unauthorized`.
+By default the authenticator responds with:
+
+- `401 Unauthorized` for invalid token input
+- `429 Too Many Requests` when Keycloak or JWKS lookup is rate limited
+- `502 Bad Gateway` when Keycloak returns an invalid response
+- `503 Service Unavailable` when Keycloak is temporarily unavailable
+
+That infrastructure-aware behavior comes from typed exceptions raised by
+`apacheborys/keycloak-php-client`, including authentication, authorization, rate-limit,
+transport, server, and invalid-response failures.
+
+If you want to hide infrastructure state from clients, configure:
+
+```yaml
+keycloak_bridge:
+  security:
+    expose_infrastructure_failure_status: false
+```
+
+With that setting:
+
+- the response status is always `401 Unauthorized`
+- the response body still contains a safe internal reason code
+- typed Keycloak failures still log sanitized diagnostic context when a logger is configured
+
+## Response Body
+
+The authenticator always returns a minimal safe JSON payload:
+
+```json
+{
+  "message": "Authentication failed.",
+  "reason": "keycloak_unavailable"
+}
+```
+
+Important properties:
+
+- `message` is always the generic user-facing string `Authentication failed.`
+- `reason` is a safe machine-readable code such as `malformed_token`,
+  `signature_validation_failed`, `keycloak_rate_limited`, or `keycloak_unavailable`
+- raw JWT values are never returned
+- the `Authorization` header is never returned
+- `client_secret`, `access_token`, `refresh_token`, and `password` values are never returned
+- raw Keycloak response bodies are not exposed to clients
+
+## Logging
+
+If `logger_service` is configured, typed Keycloak verification failures are logged with
+sanitized diagnostic context from `KeycloakErrorContext`.
+
+The authenticator logs:
+
+- `method`
+- sanitized `uri`
+- `status_code`
+- sanitized `keycloak_error`
+- sanitized `keycloak_error_description`
+- sanitized `correlation_id`
+- `exception_class`
+
+Logging behavior:
+
+- authentication and authorization failures are logged at `warning`
+- rate limiting is also logged at `warning`
+- transport, server, invalid-response, and generic Keycloak failures are logged at `error`
+- normal malformed or invalid JWT input is not logged by default
+
+The logger does not receive:
+
+- raw JWT tokens
+- the `Authorization` header
+- raw Keycloak response bodies
+- unsanitized `client_secret`, `access_token`, `refresh_token`, or `password` values
 
 ## Typical Extension Point
 

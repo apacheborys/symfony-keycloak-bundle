@@ -12,6 +12,7 @@ use Apacheborys\SymfonyKeycloakBridgeBundle\KeycloakBridgeBundle;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\InMemoryLogger;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
@@ -29,6 +30,14 @@ use Symfony\Component\HttpKernel\Kernel;
 final class TestKernel extends Kernel
 {
     use MicroKernelTrait;
+
+    public function __construct(
+        string $environment,
+        bool $debug,
+        private readonly bool $exposeInfrastructureFailureStatus = true,
+    ) {
+        parent::__construct($environment, $debug);
+    }
 
     #[Override]
     public function registerBundles(): iterable
@@ -121,6 +130,10 @@ final class TestKernel extends Kernel
         $services
             ->set('psr17.factory', Psr17Factory::class);
 
+        $services
+            ->set('test.logger', InMemoryLogger::class)
+            ->public();
+
         $container->extension(
             namespace: 'keycloak_bridge',
             config: [
@@ -132,7 +145,11 @@ final class TestKernel extends Kernel
                 'http_client_service' => 'psr18.client',
                 'request_factory_service' => 'psr17.factory',
                 'stream_factory_service' => 'psr17.factory',
+                'logger_service' => 'test.logger',
                 'realm_list_ttl' => 30,
+                'security' => [
+                    'expose_infrastructure_failure_status' => $this->exposeInfrastructureFailureStatus,
+                ],
                 'user_entities' => [
                     LocalUser::class => [
                         'realm' => 'users-realm',
