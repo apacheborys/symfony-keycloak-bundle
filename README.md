@@ -13,12 +13,14 @@ The goal is simple:
 In the happy path you configure only:
 
 - Keycloak base client credentials
+- a unique application `callsign`
 - the target realm for each user entity
 
 Everything else can be inferred:
 
 - the bundle uses `KeycloakUserInterface::getId()` as the canonical local identifier automatically
-- the default mapper projects that identifier into Keycloak attributes
+- the bundle prepends the configured `callsign.` to every Keycloak-facing attribute value and role name
+- the default mapper projects that identifier into Keycloak attributes through that `callsign`
 - the same identifier is expected in JWT payload automatically
 - custom attribute mapping, role projection, and custom mappers stay opt-in
 
@@ -56,6 +58,7 @@ keycloak_bridge:
   client_realm: '%env(KEYCLOAK_CLIENT_REALM)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -64,9 +67,12 @@ keycloak_bridge:
 That is enough to start:
 
 - `App\Entity\User` must implement `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
+- `callsign` must be unique per application that talks to the same Keycloak realms
 - the bundle uses `KeycloakUserInterface::getId()` as the local-to-Keycloak reference value
 - that identifier is automatically added to Keycloak attributes during user sync under `external-user-id`
-- the same identifier is expected in JWT payload after you bootstrap the Keycloak attribute once under `external_user_id`
+- the stored Keycloak value becomes `callsign.<local-id>`, for example `billing.58f5b67f-bcf4-4d12-86a3-a54f7704f326`
+- the same prefixed value is expected in JWT payload after you bootstrap the Keycloak attribute once under `external_user_id`
+- `KeycloakJwtAuthenticator` strips the `callsign.` prefix back off and exposes the raw local identifier to Symfony
 
 This minimal setup assumes your container already provides:
 
@@ -77,7 +83,7 @@ Important distinction:
 
 - `getId()` is used as the local-to-Keycloak reference attribute value
 - `getKeycloakId()` is used first for Keycloak-side update, delete, and lookup operations
-- if `getKeycloakId()` is `null`, the client falls back to the mapped local-id Keycloak attribute
+- if `getKeycloakId()` is `null`, the client falls back to the mapped local-id Keycloak attribute using the callsigned value returned by the mapper
 
 ## Start Here
 

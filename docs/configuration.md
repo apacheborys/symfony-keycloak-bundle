@@ -10,6 +10,7 @@ keycloak_bridge:
   client_realm: '%env(KEYCLOAK_CLIENT_REALM)%'
   client_id: '%env(KEYCLOAK_CLIENT_ID)%'
   client_secret: '%env(KEYCLOAK_CLIENT_SECRET)%'
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -22,8 +23,11 @@ That is the minimum supported public configuration.
 When you keep configuration minimal, the bridge still does real work for you:
 
 - `App\Entity\User` must implement `Apacheborys\KeycloakPhpClient\Entity\KeycloakUserInterface`
+- `callsign` is required and should be unique per application
 - `KeycloakUserInterface::getId()` is treated as the canonical local identifier automatically
 - that identifier mapping is inserted into `attributes_map` automatically under `external-user-id`, unless you override it
+- every mapped Keycloak attribute value is stored as `callsign.<value>`
+- every mapped Keycloak role name is stored as `callsign.` + projected role name
 - if the identifier mapping has no explicit `jwt_claim_name`, the bridge derives one automatically
 - `LocalEntityMapper` is selected automatically unless you replace it
 
@@ -35,6 +39,7 @@ When you keep configuration minimal, the bridge still does real work for you:
 | `client_realm` | yes | Realm where the client credentials live |
 | `client_id` | yes | Keycloak client ID used by the bridge |
 | `client_secret` | yes | Keycloak client secret |
+| `callsign` | yes | Unique application callsign prepended to every Keycloak-facing attribute value and role name |
 | `http_client_service` | no | Symfony service ID for PSR-18 client |
 | `request_factory_service` | no | Symfony service ID for PSR-17 request factory |
 | `stream_factory_service` | no | Symfony service ID for PSR-17 stream factory |
@@ -50,6 +55,7 @@ Each entry is keyed by class name:
 
 ```yaml
 keycloak_bridge:
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -86,6 +92,7 @@ Use `attributes_map` when you want to project more than just the canonical local
 
 ```yaml
 keycloak_bridge:
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -119,6 +126,8 @@ Important behavior:
 - use `property: 'id'` when you want to customize that identifier mapping explicitly
 - if the identifier mapping omits `attribute_name`, the bridge uses `external-user-id`
 - if the identifier mapping omits `jwt_claim_name`, the bridge derives `external_user_id` from that default name
+- the value stored in Keycloak for every mapped attribute is prefixed to `callsign.<value>`
+- fallback user lookup uses the full callsigned attribute value returned by the mapper
 - duplicated `property` values are rejected
 - duplicated Keycloak `attribute_name` values are rejected
 - blank names are rejected early during container build
@@ -158,6 +167,7 @@ Role behavior is now configured per entity:
 
 ```yaml
 keycloak_bridge:
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -177,7 +187,7 @@ Role options:
 
 Behavior:
 
-- local role names are projected through `prefix` and `suffix`
+- local role names are projected through `prefix` and `suffix`, and then the bundle prepends `callsign.`
 - if a projected role already exists in Keycloak, the mapper reuses the existing `RoleDto`
 - if a projected role is missing and `allow_creation=true`, the default mapper returns a placeholder `RoleDto`, and `keycloak-php-client` creates the role during synchronization
 - if a projected role is missing and `allow_creation=false`, the default mapper throws explicitly instead of silently dropping the role
@@ -186,6 +196,7 @@ Example:
 
 ```yaml
 keycloak_bridge:
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -196,8 +207,8 @@ keycloak_bridge:
 
 With that config:
 
-- `ROLE_USER` becomes `payment.ROLE_USER.svc`
-- `ROLE_KYC_MANAGER` becomes `payment.ROLE_KYC_MANAGER.svc`
+- `ROLE_USER` becomes `billing.payment.ROLE_USER.svc`
+- `ROLE_KYC_MANAGER` becomes `billing.payment.ROLE_KYC_MANAGER.svc`
 
 ## Custom Mapper
 
@@ -205,6 +216,7 @@ If the default login, attribute projection, or role projection rules do not fit 
 
 ```yaml
 keycloak_bridge:
+  callsign: '%env(KEYCLOAK_CALLSIGN)%'
   user_entities:
     App\Entity\User:
       realm: '%env(KEYCLOAK_USERS_REALM)%'
@@ -215,9 +227,9 @@ Your mapper must implement:
 
 - `Apacheborys\KeycloakPhpClient\Mapper\LocalKeycloakUserBridgeMapperInterface`
 
-The bundle automatically tags the mapper as `keycloak.local_user_mapper`.
+The bundle resolves the configured mapper automatically and wraps it internally so attribute values, fallback lookup value, and final role names still receive the configured `callsign.` prefix.
 
-If the mapper needs constructor arguments, define it as a normal Symfony service.
+If the mapper needs constructor arguments, define it as a normal Symfony service. Custom mappers should return raw local values and raw final role names without the `callsign.` prefix; the bundle applies that prefix centrally.
 
 ## Resolution Flow
 

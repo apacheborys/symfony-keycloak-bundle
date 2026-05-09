@@ -9,6 +9,7 @@ use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -44,9 +45,9 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $jwt = self::buildJwt(
             issuer: 'https://example.test/realms/users-realm',
             preferredUsername: 'alice@example.test',
-            realmRoles: ['payment.ROLE_USER.svc'],
+            realmRoles: ['bridge.payment.ROLE_USER.svc'],
             accountRoles: ['manage-account'],
-            additionalPayloadClaims: ['external_user_id' => 'some-external-user-id'],
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
         );
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
@@ -61,7 +62,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
 
         self::assertInstanceOf(KeycloakJwtUser::class, $user);
         self::assertSame('some-external-user-id', $user->getUserIdentifier());
-        self::assertSame(['payment.ROLE_USER.svc', 'manage-account'], $user->getRoles());
+        self::assertSame(['bridge.payment.ROLE_USER.svc', 'manage-account'], $user->getRoles());
     }
 
     public function testAuthenticateBuildsSymfonyUserFromConfiguredJwtClaimName(): void
@@ -70,7 +71,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $jwt = self::buildJwt(
             issuer: 'https://example.test/realms/users-realm',
             preferredUsername: 'alice@example.test',
-            additionalPayloadClaims: ['external_user_id_test' => 'alias-user-id'],
+            additionalPayloadClaims: ['external_user_id_test' => 'bridge.alias-user-id'],
         );
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
@@ -108,7 +109,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $authenticator = $this->createAuthenticator(verificationResult: false, baseUrl: 'https://example.test');
         $jwt = self::buildJwt(
             issuer: 'https://example.test/realms/users-realm',
-            additionalPayloadClaims: ['external_user_id' => 'some-external-user-id'],
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
         );
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
@@ -154,6 +155,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
                     ],
                 ),
             ],
+            callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
         );
     }
 

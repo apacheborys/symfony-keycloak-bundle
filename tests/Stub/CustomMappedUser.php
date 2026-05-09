@@ -73,6 +73,7 @@ final readonly class CustomMappedUser implements KeycloakUserInterface
         return $this->externalIdentifier;
     }
 
+    #[\Override]
     public function getId(): string
     {
         return $this->id;

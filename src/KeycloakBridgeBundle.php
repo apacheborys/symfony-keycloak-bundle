@@ -18,9 +18,11 @@ use Apacheborys\KeycloakPhpClient\Service\KeycloakUserIdentifierAttributeService
 use Apacheborys\KeycloakPhpClient\Service\KeycloakUserManagementServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Factory\UserEntityConfigFactory;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\CallsignedLocalUserMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Mapper\LocalEntityMapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
 use Override;
 use Psr\Http\Client\ClientInterface;
@@ -46,6 +48,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                 ->scalarNode('client_realm')->isRequired()->cannotBeEmpty()->end()
                 ->scalarNode('client_id')->isRequired()->cannotBeEmpty()->end()
                 ->scalarNode('client_secret')->isRequired()->cannotBeEmpty()->end()
+                ->scalarNode('callsign')->isRequired()->cannotBeEmpty()->end()
                 ->scalarNode('http_client_service')->defaultNull()->end()
                 ->scalarNode('request_factory_service')->defaultNull()->end()
                 ->scalarNode('stream_factory_service')->defaultNull()->end()
@@ -92,6 +95,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
      *  client_realm: string,
      *  client_id: string,
      *  client_secret: string,
+     *  callsign: string,
      *  http_client_service: string|null,
      *  request_factory_service: string|null,
      *  stream_factory_service: string|null,
@@ -119,10 +123,6 @@ final class KeycloakBridgeBundle extends AbstractBundle
     #[Override]
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
-        $builder
-            ->registerForAutoconfiguration(interface: LocalKeycloakUserBridgeMapperInterface::class)
-            ->addTag(name: 'keycloak.local_user_mapper');
-
         $services = $container->services();
         $httpClientRef = is_string($config['http_client_service'])
             ? service(serviceId: $config['http_client_service'])
@@ -155,6 +155,10 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     $config['realm_list_ttl'],
                 ]
             );
+
+        $services
+            ->set(id: CallsignValuePrefixer::class)
+            ->args(arguments: [$config['callsign']]);
 
         $services->set(id: KeycloakHttpClientFactory::class);
 
@@ -203,6 +207,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     service(serviceId: KeycloakJwtVerificationServiceInterface::class),
                     service(serviceId: KeycloakClientConfig::class),
                     tagged_iterator(tag: 'keycloak.user_entity_config'),
+                    service(serviceId: CallsignValuePrefixer::class),
                 ]
             );
 
@@ -261,6 +266,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                         tagged_iterator(tag: 'keycloak.user_entity_config'),
                         $config['client_id'],
                         $config['client_secret'],
+                        service(serviceId: CallsignValuePrefixer::class),
                     ]
                 )
                 ->tag(name: 'keycloak.local_user_mapper');
@@ -272,22 +278,25 @@ final class KeycloakBridgeBundle extends AbstractBundle
             }
 
             if ($builder->hasDefinition($mapperClass)) {
-                $definition = $builder->getDefinition($mapperClass);
-                if (!$definition->hasTag('keycloak.local_user_mapper')) {
-                    $definition->addTag('keycloak.local_user_mapper');
-                }
-
-                continue;
-            }
-
-            if ($builder->hasAlias($mapperClass)) {
-                continue;
+                $builder->getDefinition($mapperClass)->clearTag('keycloak.local_user_mapper');
+            } elseif (!$builder->hasAlias($mapperClass)) {
+                $services
+                    ->set(id: $mapperClass, class: $mapperClass)
+                    ->autowire()
+                    ->autoconfigure();
             }
 
             $services
-                ->set(id: $mapperClass, class: $mapperClass)
-                ->autowire()
-                ->autoconfigure()
+                ->set(
+                    id: 'keycloak_bridge.callsigned_mapper.' . str_replace('\\', '_', $mapperClass),
+                    class: CallsignedLocalUserMapper::class
+                )
+                ->args(
+                    arguments: [
+                        service(serviceId: $mapperClass),
+                        service(serviceId: CallsignValuePrefixer::class),
+                    ]
+                )
                 ->tag(name: 'keycloak.local_user_mapper');
         }
     }

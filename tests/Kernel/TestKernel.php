@@ -128,6 +128,7 @@ final class TestKernel extends Kernel
                 'client_realm' => 'master',
                 'client_id' => 'bridge-client',
                 'client_secret' => 'bridge-secret',
+                'callsign' => 'bridge',
                 'http_client_service' => 'psr18.client',
                 'request_factory_service' => 'psr17.factory',
                 'stream_factory_service' => 'psr17.factory',
