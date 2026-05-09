@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Security;
 
 use Apacheborys\KeycloakPhpClient\Exception\KeycloakErrorContext;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthenticationException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthorizationException;
 use Apacheborys\KeycloakPhpClient\Exception\KeycloakInvalidResponseException;
 use Apacheborys\KeycloakPhpClient\Exception\KeycloakRateLimitException;
 use Apacheborys\KeycloakPhpClient\Exception\KeycloakServerException;
@@ -173,34 +175,56 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         );
     }
 
-    public function testAuthenticateTranslatesKeycloakTransportExceptionIntoControlledFailure(): void
+    public function testTransportExceptionProducesControlledFailureResponseByDefault(): void
     {
+        $rawJwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
+        );
         $authenticator = $this->createAuthenticator(
             verificationResult: new KeycloakTransportException(
                 new KeycloakErrorContext(
                     method: 'GET',
-                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret&foo=bar',
                     statusCode: 503,
                     responseBody: 'sensitive response body',
+                    keycloakError: 'Bearer ' . $rawJwt,
                 ),
             ),
             baseUrl: 'https://example.test',
         );
-        $jwt = self::buildJwt(
-            issuer: 'https://example.test/realms/users-realm',
-            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
-        );
-        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $rawJwt]);
 
         self::assertTrue($authenticator->supports($request));
 
-        self::assertAuthenticationFailure(
+        $exception = self::catchAuthenticationFailure(
             authenticator: $authenticator,
             request: $request,
-            expectedMessage: 'Keycloak is temporarily unavailable.',
-            expectedReason: KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE,
-            expectedStatusCode: Response::HTTP_SERVICE_UNAVAILABLE,
         );
+
+        self::assertSame('Keycloak is temporarily unavailable.', $exception->getMessageKey());
+        self::assertSame(KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE, $exception->getReasonCode());
+        self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $exception->getStatusCode());
+        self::assertStringNotContainsString($rawJwt, $exception->getMessage());
+        self::assertStringNotContainsString('Bearer', $exception->getMessage());
+
+        $response = $authenticator->onAuthenticationFailure($request, $exception);
+
+        self::assertNotNull($response);
+        self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
+        self::assertSame(
+            [
+                'message' => 'Authentication failed.',
+                'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE,
+            ],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
+
+        $content = (string) $response->getContent();
+        self::assertStringNotContainsString($rawJwt, $content);
+        self::assertStringNotContainsString('Bearer', $content);
+        self::assertStringNotContainsString('client_secret', $content);
+        self::assertStringNotContainsString('sensitive response body', $content);
     }
 
     public function testOnAuthenticationFailureUsesBridgeExceptionStatusAndReasonCode(): void
@@ -295,6 +319,52 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
             [
                 'message' => 'Authentication failed.',
                 'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_INVALID_RESPONSE,
+            ],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
+    }
+
+    public function testOnAuthenticationFailureReturns403ForKeycloakAuthorizationException(): void
+    {
+        $response = $this->authenticateAndRenderFailureResponse(
+            new KeycloakAuthorizationException(
+                new KeycloakErrorContext(
+                    method: 'GET',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret',
+                    statusCode: 403,
+                    responseBody: 'sensitive response body',
+                ),
+            ),
+        );
+
+        self::assertSame(Response::HTTP_FORBIDDEN, $response->getStatusCode());
+        self::assertSame(
+            [
+                'message' => 'Authentication failed.',
+                'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_AUTHORIZATION_FAILED,
+            ],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
+    }
+
+    public function testOnAuthenticationFailureReturns401ForKeycloakAuthenticationException(): void
+    {
+        $response = $this->authenticateAndRenderFailureResponse(
+            new KeycloakAuthenticationException(
+                new KeycloakErrorContext(
+                    method: 'GET',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret',
+                    statusCode: 401,
+                    responseBody: 'sensitive response body',
+                ),
+            ),
+        );
+
+        self::assertSame(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
+        self::assertSame(
+            [
+                'message' => 'Authentication failed.',
+                'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_AUTHENTICATION_FAILED,
             ],
             json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
         );
