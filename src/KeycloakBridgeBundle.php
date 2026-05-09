@@ -208,6 +208,7 @@ final class KeycloakBridgeBundle extends AbstractBundle
                     service(serviceId: KeycloakClientConfig::class),
                     tagged_iterator(tag: 'keycloak.user_entity_config'),
                     service(serviceId: CallsignValuePrefixer::class),
+                    $loggerRef,
                 ]
             );
 

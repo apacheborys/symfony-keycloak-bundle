@@ -18,6 +18,7 @@ use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\Exception\KeycloakJwtAuthenticationException;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Override;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -32,6 +33,7 @@ use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface
 final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
     private const string FALLBACK_REASON = 'authentication_failed';
+    private const string KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE = 'Keycloak JWT verification failed.';
     private const string REQUEST_ATTRIBUTE_RAW_JWT = '_keycloak_bridge.jwt.raw';
     private const string REQUEST_ATTRIBUTE_PARSED_JWT = '_keycloak_bridge.jwt.parsed';
 
@@ -46,6 +48,7 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         private readonly KeycloakClientConfig $keycloakClientConfig,
         iterable $userEntityConfigs,
         private readonly CallsignValuePrefixer $callsignValuePrefixer,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         $configuredIdentifierClaimNames = [];
         foreach ($userEntityConfigs as $userEntityConfig) {
@@ -114,6 +117,8 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
             | KeycloakAuthorizationException
             | KeycloakException $exception
         ) {
+            $this->logKeycloakVerificationFailure($exception);
+
             throw KeycloakJwtAuthenticationException::fromKeycloakException($exception);
         }
 
@@ -326,5 +331,62 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         }
 
         return $token;
+    }
+
+    private function logKeycloakVerificationFailure(KeycloakException $exception): void
+    {
+        if ($this->logger === null) {
+            return;
+        }
+
+        $context = $exception->getContext();
+        $logContext = [
+            'method' => $context->getMethod(),
+            'uri' => $context->getUri(),
+            'status_code' => $context->getStatusCode(),
+            'keycloak_error' => self::sanitizeLogValue($context->getKeycloakError()),
+            'keycloak_error_description' => self::sanitizeLogValue($context->getKeycloakErrorDescription()),
+            'correlation_id' => self::sanitizeLogValue($context->getCorrelationId()),
+            'exception_class' => $exception::class,
+        ];
+
+        if (
+            $exception instanceof KeycloakAuthenticationException
+            || $exception instanceof KeycloakAuthorizationException
+            || $exception instanceof KeycloakRateLimitException
+        ) {
+            $this->logger->warning(self::KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE, $logContext);
+
+            return;
+        }
+
+        $this->logger->error(self::KEYCLOAK_JWT_VERIFICATION_FAILED_MESSAGE, $logContext);
+    }
+
+    private static function sanitizeLogValue(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return $value;
+        }
+
+        $sanitizedValue = $value;
+        $patterns = [
+            '/Authorization\s*:\s*Bearer\s+\S+/i' => '[redacted credentials]',
+            '/\bBearer\s+\S+/i' => '[redacted credentials]',
+            '/\b(client_secret|refresh_token|access_token|password)\b\s*[:=]\s*\S+/i' => '$1=[redacted]',
+            '/\b[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\b/' => '[redacted jwt]',
+            '/\bAuthorization\b/i' => 'redacted',
+            '/\bBearer\b/i' => 'redacted',
+            '/\bclient_secret\b/i' => 'redacted',
+            '/\brefresh_token\b/i' => 'redacted',
+            '/\baccess_token\b/i' => 'redacted',
+            '/\bpassword\b/i' => 'redacted',
+        ];
+
+        foreach ($patterns as $pattern => $replacement) {
+            $sanitizedValue = (string) preg_replace($pattern, $replacement, $sanitizedValue);
+        }
+
+        return $sanitizedValue;
     }
 }

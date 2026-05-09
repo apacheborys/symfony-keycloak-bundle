@@ -16,8 +16,11 @@ use Apacheborys\SymfonyKeycloakBridgeBundle\Security\Exception\KeycloakJwtAuthen
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\InMemoryLogger;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
@@ -320,8 +323,69 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         self::assertStringNotContainsString('Bearer', $content);
     }
 
-    private function createAuthenticator(bool|\Throwable $verificationResult, string $baseUrl): KeycloakJwtAuthenticator
+    public function testAuthenticateLogsSafeContextWhenVerificationThrowsKeycloakServerException(): void
     {
+        $logger = new InMemoryLogger();
+        $rawJwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
+        );
+        $authenticator = $this->createAuthenticator(
+            verificationResult: new KeycloakServerException(
+                new KeycloakErrorContext(
+                    method: 'GET',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret&foo=bar',
+                    statusCode: 503,
+                    responseBody: 'sensitive response body',
+                    keycloakError: 'Bearer ' . $rawJwt,
+                    keycloakErrorDescription: 'Authorization: Bearer ' . $rawJwt,
+                    correlationId: 'access_token=secret refresh_token=secret client_secret=secret password=secret',
+                ),
+            ),
+            baseUrl: 'https://example.test',
+            logger: $logger,
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $rawJwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        $exception = self::catchAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+        );
+
+        self::assertSame(KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE, $exception->getReasonCode());
+        self::assertCount(1, $logger->records);
+        self::assertSame(LogLevel::ERROR, $logger->records[0]['level']);
+        self::assertSame('Keycloak JWT verification failed.', $logger->records[0]['message']);
+        self::assertSame('GET', $logger->records[0]['context']['method']);
+        self::assertSame(
+            'https://example.test/protocol/openid-connect/certs?client_secret=[redacted]&foo=bar',
+            $logger->records[0]['context']['uri'],
+        );
+        self::assertSame(503, $logger->records[0]['context']['status_code']);
+        self::assertSame('[redacted credentials]', $logger->records[0]['context']['keycloak_error']);
+        self::assertSame('[redacted credentials]', $logger->records[0]['context']['keycloak_error_description']);
+        self::assertSame(KeycloakServerException::class, $logger->records[0]['context']['exception_class']);
+        self::assertIsString($logger->records[0]['context']['correlation_id']);
+        self::assertStringContainsString('[redacted]', $logger->records[0]['context']['correlation_id']);
+
+        $serializedRecord = json_encode($logger->records[0], JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString($rawJwt, $serializedRecord);
+        self::assertStringNotContainsString('Authorization', $serializedRecord);
+        self::assertStringNotContainsString('Bearer', $serializedRecord);
+        self::assertStringNotContainsString('client_secret=secret', $serializedRecord);
+        self::assertStringNotContainsString('access_token=secret', $serializedRecord);
+        self::assertStringNotContainsString('refresh_token=secret', $serializedRecord);
+        self::assertStringNotContainsString('password=secret', $serializedRecord);
+        self::assertStringNotContainsString('sensitive response body', $serializedRecord);
+    }
+
+    private function createAuthenticator(
+        bool|\Throwable $verificationResult,
+        string $baseUrl,
+        ?LoggerInterface $logger = null,
+    ): KeycloakJwtAuthenticator {
         return new KeycloakJwtAuthenticator(
             jwtVerificationService: new class ($verificationResult) implements KeycloakJwtVerificationServiceInterface {
                 public function __construct(
@@ -360,6 +424,7 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
                 ),
             ],
             callsignValuePrefixer: new CallsignValuePrefixer('bridge'),
+            logger: $logger,
         );
     }
 

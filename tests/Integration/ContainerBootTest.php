@@ -16,6 +16,7 @@ use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\KeycloakBootstrapper;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Kernel\TestKernel;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\CustomMappedUser;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\InMemoryLogger;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\Mapper\CustomMappedUserMapper;
 use Override;
@@ -82,6 +83,19 @@ final class ContainerBootTest extends KernelTestCase
         self::assertTrue($container->has(KeycloakBootstrapper::class));
         self::assertInstanceOf(KeycloakJwtAuthenticator::class, $container->get(KeycloakJwtAuthenticator::class));
         self::assertInstanceOf(KeycloakBootstrapper::class, $container->get(KeycloakBootstrapper::class));
+    }
+
+    public function testContainerInjectsConfiguredLoggerIntoAuthenticator(): void
+    {
+        self::bootKernel();
+
+        $container = static::getContainer();
+        $authenticator = $container->get(KeycloakJwtAuthenticator::class);
+        $reflectionProperty = new \ReflectionProperty($authenticator, 'logger');
+        $logger = $reflectionProperty->getValue($authenticator);
+
+        self::assertInstanceOf(InMemoryLogger::class, $logger);
+        self::assertSame($container->get('test.logger'), $logger);
     }
 
     public function testUserEntityRealmMapping(): void
