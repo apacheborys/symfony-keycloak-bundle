@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Unit\Security;
 
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakErrorContext;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakTransportException;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Security\Exception\KeycloakJwtAuthenticationException;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtAuthenticator;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Security\KeycloakJwtUser;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Tests\Stub\LocalUser;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
 
@@ -29,14 +32,14 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         self::assertTrue($authenticator->supports($request));
     }
 
-    public function testSupportsReturnsFalseForJwtFromUnexpectedIssuer(): void
+    public function testSupportsReturnsTrueForJwtFromUnexpectedIssuer(): void
     {
         $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
         $jwt = self::buildJwt(issuer: 'https://other.example.test/realms/users-realm');
 
         $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
 
-        self::assertFalse($authenticator->supports($request));
+        self::assertTrue($authenticator->supports($request));
     }
 
     public function testAuthenticateBuildsSymfonyUserFromJwtClaims(): void
@@ -99,9 +102,13 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
 
         self::assertTrue($authenticator->supports($request));
 
-        $this->expectException(CustomUserMessageAuthenticationException::class);
-        $this->expectExceptionMessage('Configured JWT user identifier attribute is missing.');
-        $authenticator->authenticate($request);
+        self::assertAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+            expectedMessage: 'Configured JWT user identifier attribute is missing.',
+            expectedReason: KeycloakJwtAuthenticationException::REASON_IDENTIFIER_CLAIM_MISSING,
+            expectedStatusCode: Response::HTTP_UNAUTHORIZED,
+        );
     }
 
     public function testAuthenticateThrowsWhenJwtVerificationFails(): void
@@ -115,22 +122,124 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
 
         self::assertTrue($authenticator->supports($request));
 
-        $this->expectException(CustomUserMessageAuthenticationException::class);
-        $this->expectExceptionMessage('JWT signature validation failed.');
-        $authenticator->authenticate($request);
+        self::assertAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+            expectedMessage: 'JWT signature validation failed.',
+            expectedReason: KeycloakJwtAuthenticationException::REASON_SIGNATURE_VALIDATION_FAILED,
+            expectedStatusCode: Response::HTTP_UNAUTHORIZED,
+        );
     }
 
-    private function createAuthenticator(bool $verificationResult, string $baseUrl): KeycloakJwtAuthenticator
+    public function testAuthenticateThrowsWhenJwtIssuerIsUnsupported(): void
+    {
+        $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
+        $jwt = self::buildJwt(
+            issuer: 'https://other.example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        self::assertAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+            expectedMessage: 'JWT issuer is not supported.',
+            expectedReason: KeycloakJwtAuthenticationException::REASON_UNSUPPORTED_ISSUER,
+            expectedStatusCode: Response::HTTP_UNAUTHORIZED,
+        );
+    }
+
+    public function testAuthenticateThrowsWhenJwtIsMalformed(): void
+    {
+        $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer not-a-jwt']);
+
+        self::assertTrue($authenticator->supports($request));
+
+        self::assertAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+            expectedMessage: 'Malformed JWT token.',
+            expectedReason: KeycloakJwtAuthenticationException::REASON_MALFORMED_TOKEN,
+            expectedStatusCode: Response::HTTP_UNAUTHORIZED,
+        );
+    }
+
+    public function testAuthenticateTranslatesKeycloakTransportExceptionIntoControlledFailure(): void
+    {
+        $authenticator = $this->createAuthenticator(
+            verificationResult: new KeycloakTransportException(
+                new KeycloakErrorContext(
+                    method: 'GET',
+                    uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret',
+                    statusCode: 503,
+                    responseBody: 'sensitive response body',
+                ),
+            ),
+            baseUrl: 'https://example.test',
+        );
+        $jwt = self::buildJwt(
+            issuer: 'https://example.test/realms/users-realm',
+            additionalPayloadClaims: ['external_user_id' => 'bridge.some-external-user-id'],
+        );
+        $request = new Request(server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt]);
+
+        self::assertTrue($authenticator->supports($request));
+
+        self::assertAuthenticationFailure(
+            authenticator: $authenticator,
+            request: $request,
+            expectedMessage: 'Keycloak is temporarily unavailable.',
+            expectedReason: KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE,
+            expectedStatusCode: Response::HTTP_SERVICE_UNAVAILABLE,
+        );
+    }
+
+    public function testOnAuthenticationFailureUsesBridgeExceptionStatusAndReasonCode(): void
+    {
+        $authenticator = $this->createAuthenticator(verificationResult: true, baseUrl: 'https://example.test');
+        $response = $authenticator->onAuthenticationFailure(
+            new Request(),
+            KeycloakJwtAuthenticationException::fromKeycloakException(
+                new KeycloakTransportException(
+                    new KeycloakErrorContext(
+                        method: 'GET',
+                        uri: 'https://example.test/protocol/openid-connect/certs?client_secret=secret',
+                        statusCode: 503,
+                        responseBody: 'sensitive response body',
+                    ),
+                ),
+            ),
+        );
+
+        self::assertNotNull($response);
+        self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
+        self::assertSame(
+            [
+                'message' => 'Keycloak is temporarily unavailable.',
+                'reason' => KeycloakJwtAuthenticationException::REASON_KEYCLOAK_UNAVAILABLE,
+            ],
+            json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR),
+        );
+    }
+
+    private function createAuthenticator(bool|\Throwable $verificationResult, string $baseUrl): KeycloakJwtAuthenticator
     {
         return new KeycloakJwtAuthenticator(
             jwtVerificationService: new class ($verificationResult) implements KeycloakJwtVerificationServiceInterface {
                 public function __construct(
-                    private readonly bool $verificationResult,
+                    private readonly bool|\Throwable $verificationResult,
                 ) {
                 }
 
                 public function verifyJwt(string $jwt): bool
                 {
+                    if ($this->verificationResult instanceof \Throwable) {
+                        throw $this->verificationResult;
+                    }
+
                     return $this->verificationResult;
                 }
             },
@@ -219,5 +328,22 @@ final class KeycloakJwtAuthenticatorTest extends TestCase
         $encoded = base64_encode((string) json_encode($data, JSON_THROW_ON_ERROR));
 
         return rtrim(strtr($encoded, '+/', '-_'), '=');
+    }
+
+    private static function assertAuthenticationFailure(
+        KeycloakJwtAuthenticator $authenticator,
+        Request $request,
+        string $expectedMessage,
+        string $expectedReason,
+        int $expectedStatusCode,
+    ): void {
+        try {
+            $authenticator->authenticate($request);
+            self::fail('Expected KeycloakJwtAuthenticationException to be thrown.');
+        } catch (KeycloakJwtAuthenticationException $exception) {
+            self::assertSame($expectedMessage, $exception->getMessageKey());
+            self::assertSame($expectedReason, $exception->getReasonCode());
+            self::assertSame($expectedStatusCode, $exception->getStatusCode());
+        }
     }
 }

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Security;
 
 use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakException;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
+use Apacheborys\SymfonyKeycloakBridgeBundle\Security\Exception\KeycloakJwtAuthenticationException;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Service\Internal\CallsignValuePrefixer;
 use Override;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -57,17 +59,14 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
             return false;
         }
 
+        $request->attributes->set(self::REQUEST_ATTRIBUTE_RAW_JWT, $rawJwt);
+
         try {
             $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
         } catch (\Throwable) {
-            return false;
+            return true;
         }
 
-        if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
-            return false;
-        }
-
-        $request->attributes->set(self::REQUEST_ATTRIBUTE_RAW_JWT, $rawJwt);
         $request->attributes->set(self::REQUEST_ATTRIBUTE_PARSED_JWT, $jwt);
 
         return true;
@@ -89,24 +88,28 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         if (!$jwt instanceof JsonWebToken) {
             try {
                 $jwt = JsonWebToken::fromRawToken(rawToken: $rawJwt);
-            } catch (\Throwable) {
-                throw new CustomUserMessageAuthenticationException(message: 'Malformed JWT token.');
+            } catch (\Throwable $exception) {
+                throw KeycloakJwtAuthenticationException::malformedToken(previous: $exception);
             }
         }
 
         if (!$this->isIssuerSupported(issuer: $jwt->getPayload()->getIss())) {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT issuer is not supported.');
+            throw KeycloakJwtAuthenticationException::unsupportedIssuer();
         }
 
-        if (!$this->jwtVerificationService->verifyJwt(jwt: $rawJwt)) {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT signature validation failed.');
+        try {
+            $verificationResult = $this->jwtVerificationService->verifyJwt(jwt: $rawJwt);
+        } catch (KeycloakException $exception) {
+            throw KeycloakJwtAuthenticationException::fromKeycloakException($exception);
+        }
+
+        if (!$verificationResult) {
+            throw KeycloakJwtAuthenticationException::signatureValidationFailed();
         }
 
         $userIdentifier = $this->resolveUserIdentifier(jwt: $jwt);
         if ($userIdentifier === null) {
-            throw new CustomUserMessageAuthenticationException(
-                message: 'Configured JWT user identifier attribute is missing.'
-            );
+            throw KeycloakJwtAuthenticationException::identifierClaimMissing();
         }
 
         $roles = $this->extractRoles(jwt: $jwt);
@@ -132,12 +135,22 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
     #[Override]
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
+        $statusCode = $exception instanceof KeycloakJwtAuthenticationException
+            ? $exception->getStatusCode()
+            : Response::HTTP_UNAUTHORIZED;
+        $message = $exception instanceof KeycloakJwtAuthenticationException
+            ? $exception->getMessageKey()
+            : 'Authentication failed.';
+        $reason = $exception instanceof KeycloakJwtAuthenticationException
+            ? $exception->getReasonCode()
+            : $exception->getMessageKey();
+
         return new JsonResponse(
             data: [
-                'message' => 'Authentication failed.',
-                'reason' => $exception->getMessageKey(),
+                'message' => $message,
+                'reason' => $reason,
             ],
-            status: Response::HTTP_UNAUTHORIZED,
+            status: $statusCode,
         );
     }
 
