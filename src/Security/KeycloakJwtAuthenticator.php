@@ -5,7 +5,13 @@ declare(strict_types=1);
 namespace Apacheborys\SymfonyKeycloakBridgeBundle\Security;
 
 use Apacheborys\KeycloakPhpClient\Entity\JsonWebToken;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthenticationException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakAuthorizationException;
 use Apacheborys\KeycloakPhpClient\Exception\KeycloakException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakInvalidResponseException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakRateLimitException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakServerException;
+use Apacheborys\KeycloakPhpClient\Exception\KeycloakTransportException;
 use Apacheborys\KeycloakPhpClient\Service\KeycloakJwtVerificationServiceInterface;
 use Apacheborys\KeycloakPhpClient\ValueObject\KeycloakClientConfig;
 use Apacheborys\SymfonyKeycloakBridgeBundle\Model\UserEntityConfig;
@@ -17,7 +23,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
-use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
@@ -26,6 +31,7 @@ use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface
 
 final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
+    private const string FALLBACK_REASON = 'authentication_failed';
     private const string REQUEST_ATTRIBUTE_RAW_JWT = '_keycloak_bridge.jwt.raw';
     private const string REQUEST_ATTRIBUTE_PARSED_JWT = '_keycloak_bridge.jwt.parsed';
 
@@ -81,7 +87,7 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         }
 
         if (!is_string($rawJwt) || $rawJwt === '') {
-            throw new CustomUserMessageAuthenticationException(message: 'JWT bearer token was not provided.');
+            throw KeycloakJwtAuthenticationException::tokenNotProvided();
         }
 
         $jwt = $request->attributes->get(self::REQUEST_ATTRIBUTE_PARSED_JWT);
@@ -99,7 +105,15 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
 
         try {
             $verificationResult = $this->jwtVerificationService->verifyJwt(jwt: $rawJwt);
-        } catch (KeycloakException $exception) {
+        } catch (
+            KeycloakRateLimitException
+            | KeycloakServerException
+            | KeycloakTransportException
+            | KeycloakInvalidResponseException
+            | KeycloakAuthenticationException
+            | KeycloakAuthorizationException
+            | KeycloakException $exception
+        ) {
             throw KeycloakJwtAuthenticationException::fromKeycloakException($exception);
         }
 
@@ -138,16 +152,13 @@ final class KeycloakJwtAuthenticator extends AbstractAuthenticator implements Au
         $statusCode = $exception instanceof KeycloakJwtAuthenticationException
             ? $exception->getStatusCode()
             : Response::HTTP_UNAUTHORIZED;
-        $message = $exception instanceof KeycloakJwtAuthenticationException
-            ? $exception->getMessageKey()
-            : 'Authentication failed.';
         $reason = $exception instanceof KeycloakJwtAuthenticationException
             ? $exception->getReasonCode()
-            : $exception->getMessageKey();
+            : self::FALLBACK_REASON;
 
         return new JsonResponse(
             data: [
-                'message' => $message,
+                'message' => 'Authentication failed.',
                 'reason' => $reason,
             ],
             status: $statusCode,

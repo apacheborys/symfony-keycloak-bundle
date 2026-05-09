@@ -19,6 +19,16 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class KeycloakJwtAuthenticationExceptionTest extends TestCase
 {
+    public function testTokenNotProvidedFactoryReturnsSafeAuthenticationFailure(): void
+    {
+        $exception = KeycloakJwtAuthenticationException::tokenNotProvided();
+
+        self::assertSame('JWT bearer token was not provided.', $exception->getMessageKey());
+        self::assertSame('JWT bearer token was not provided.', $exception->getMessage());
+        self::assertSame(KeycloakJwtAuthenticationException::REASON_TOKEN_NOT_PROVIDED, $exception->getReasonCode());
+        self::assertSame(Response::HTTP_UNAUTHORIZED, $exception->getStatusCode());
+    }
+
     public function testMalformedTokenFactoryReturnsSafeAuthenticationFailure(): void
     {
         $previous = new \RuntimeException(

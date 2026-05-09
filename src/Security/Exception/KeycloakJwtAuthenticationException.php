@@ -18,6 +18,7 @@ use Throwable;
 
 final class KeycloakJwtAuthenticationException extends AuthenticationException
 {
+    public const string REASON_TOKEN_NOT_PROVIDED = 'token_not_provided';
     public const string REASON_MALFORMED_TOKEN = 'malformed_token';
     public const string REASON_UNSUPPORTED_ISSUER = 'unsupported_issuer';
     public const string REASON_SIGNATURE_VALIDATION_FAILED = 'signature_validation_failed';
@@ -28,21 +29,26 @@ final class KeycloakJwtAuthenticationException extends AuthenticationException
     public const string REASON_KEYCLOAK_RATE_LIMITED = 'keycloak_rate_limited';
     public const string REASON_KEYCLOAK_INVALID_RESPONSE = 'keycloak_invalid_response';
 
-    private string $messageKey;
-    private string $reasonCode;
-    private int $statusCode;
+    private readonly string $messageKey;
 
     public function __construct(
         string $messageKey,
-        string $reasonCode,
-        int $statusCode,
+        private readonly string $reasonCode,
+        private readonly int $statusCode,
         ?Throwable $previous = null,
     ) {
         parent::__construct(message: $messageKey, previous: $previous);
 
         $this->messageKey = $messageKey;
-        $this->reasonCode = $reasonCode;
-        $this->statusCode = $statusCode;
+    }
+
+    public static function tokenNotProvided(): self
+    {
+        return new self(
+            messageKey: 'JWT bearer token was not provided.',
+            reasonCode: self::REASON_TOKEN_NOT_PROVIDED,
+            statusCode: Response::HTTP_UNAUTHORIZED,
+        );
     }
 
     public static function malformedToken(?Throwable $previous = null): self
